@@ -1,0 +1,106 @@
+MELKAM/
+│
+├─ build/                    # CMake build output (ignored)
+│
+├─ include/                  # Public engine headers (API)
+│   └─ melkam/
+│       ├─ core/
+│       │   ├─ Engine.hpp
+│       │   ├─ Application.hpp
+│       │   ├─ Time.hpp
+│       │   ├─ Logger.hpp
+│       │   └─ Config.hpp
+│       │
+│       ├─ platform/
+│       │   ├─ Window.hpp
+│       │   ├─ Input.hpp
+│       │   └─ Events.hpp
+│       │
+│       ├─ renderer/
+│       │   ├─ Renderer.hpp
+│       │   ├─ Camera.hpp
+│       │   ├─ Mesh.hpp
+│       │   ├─ Material.hpp
+│       │   └─ Transform.hpp
+│       │
+│       ├─ physics/
+│       │   ├─ PhysicsWorld.hpp
+│       │   ├─ RigidBody.hpp
+│       │   └─ Collision.hpp
+│       │
+│       ├─ scene/
+│       │   ├─ Scene.hpp
+│       │   ├─ Entity.hpp
+│       │   └─ Components.hpp
+│       │
+│       └─ utils/
+│           ├─ UUID.hpp
+│           ├─ Math.hpp
+│           └─ FileSystem.hpp
+│
+├─ src/                      # Engine implementation
+│   └─ melkam/
+│       ├─ core/
+│       │   ├─ Engine.cpp
+│       │   ├─ Application.cpp
+│       │   ├─ Time.cpp
+│       │   └─ Logger.cpp
+│       │
+│       ├─ platform/
+│       │   ├─ SDLWindow.cpp
+│       │   ├─ SDLInput.cpp
+│       │   └─ SDLEvents.cpp
+│       │
+│       ├─ renderer/
+│       │   ├─ FilamentContext.cpp
+│       │   ├─ FilamentRenderer.cpp
+│       │   ├─ Camera.cpp
+│       │   ├─ Mesh.cpp
+│       │   └─ Material.cpp
+│       │
+│       ├─ physics/
+│       │   ├─ JoltContext.cpp
+│       │   ├─ PhysicsWorld.cpp
+│       │   └─ RigidBody.cpp
+│       │
+│       ├─ scene/
+│       │   ├─ Scene.cpp
+│       │   └─ Entity.cpp
+│       │
+│       └─ utils/
+│           ├─ UUID.cpp
+│           └─ FileSystem.cpp
+│
+├─ editor/                   # (Optional) Engine editor
+│   ├─ CMakeLists.txt
+│   └─ src/
+│       ├─ EditorApp.cpp
+│       ├─ Panels/
+│       └─ Widgets/
+│
+├─ third_party/              # External libraries
+│   ├─ sdl3/
+│   ├─ filament/
+│   ├─ jolt/
+│   └─ imgui/
+│
+├─ assets/                   # Engine test assets
+│   ├─ meshes/
+│   ├─ materials/
+│   ├─ shaders/
+│   └─ scenes/
+│
+├─ tools/                    # CLI tools
+│   └─ melkam-cli/
+│       ├─ main.cpp
+│       └─ ProjectGenerator.cpp
+│
+├─ tests/                    # Unit & integration tests
+│   ├─ core/
+│   ├─ physics/
+│   └─ renderer/
+│
+├─ .gitignore
+├─ CMakeLists.txt
+├─ README.md
+└─ TegenConfig.json
