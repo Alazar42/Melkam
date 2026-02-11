@@ -112,4 +112,4 @@ fonts/     UI fonts
 
 ## License
 
-TBD
+MIT. See [LICENSE](LICENSE).
