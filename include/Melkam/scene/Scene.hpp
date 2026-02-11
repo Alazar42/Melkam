@@ -19,6 +19,8 @@ namespace Melkam
     class Scene
     {
     public:
+        using Builder = std::function<void(Scene &)>;
+
         explicit Scene(std::string name);
         ~Scene();
 
@@ -39,6 +41,10 @@ namespace Melkam
 
         void addSystem(std::unique_ptr<System> system);
         void clearSystems();
+
+        void setBuilder(Builder builder);
+        bool rebuild();
+        void clear();
 
         template <typename T, typename... Args>
         T &createSystem(Args &&...args)
@@ -177,6 +183,7 @@ namespace Melkam
         std::unordered_set<EntityId> m_entitySet;
         std::unordered_map<std::type_index, std::unique_ptr<IComponentStorage>> m_components;
         std::vector<std::unique_ptr<System>> m_systems;
+        Builder m_builder;
 
         void traverseRecursive(Entity entity,
                                const std::function<void(Entity &)> &pre,

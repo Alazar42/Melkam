@@ -52,11 +52,43 @@ namespace Melkam
             return true;
         }
 
+        int configFlags = 0;
+        if (m_engine.config().resizable)
+        {
+            configFlags |= FLAG_WINDOW_RESIZABLE;
+        }
+        if (m_engine.config().borderless)
+        {
+            configFlags |= FLAG_WINDOW_UNDECORATED;
+        }
+        if (m_engine.config().highDpi)
+        {
+            configFlags |= FLAG_WINDOW_HIGHDPI;
+        }
+        if (m_engine.config().vsync)
+        {
+            configFlags |= FLAG_VSYNC_HINT;
+        }
+        if (configFlags != 0)
+        {
+            SetConfigFlags(configFlags);
+        }
+
         InitWindow(m_engine.config().width, m_engine.config().height, m_engine.config().title);
         if (!IsWindowReady())
         {
             Logger::Error("Raylib failed to create window.");
             return false;
+        }
+
+        if (m_engine.config().maximized)
+        {
+            MaximizeWindow();
+        }
+
+        if (m_engine.config().fullscreen)
+        {
+            ToggleFullscreen();
         }
 
         SetTargetFPS(60);

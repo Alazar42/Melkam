@@ -4,6 +4,7 @@
 #include <Melkam/scene/Entity.hpp>
 #include <Melkam/scene/Scene.hpp>
 #include <Melkam/scene/System.hpp>
+#include <Melkam/ui/Ui.hpp>
 
 #include <raylib.h>
 #include <raymath.h>
@@ -11,9 +12,16 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 
 namespace Melkam
 {
+    static std::unordered_map<EntityId, std::vector<CollisionCallback>> s_collisionCallbacks;
+    static std::unordered_map<EntityId, std::vector<AreaCallback>> s_areaEnterCallbacks;
+    static std::unordered_map<EntityId, std::vector<AreaCallback>> s_areaExitCallbacks;
+
     namespace
     {
         struct Aabb2D
@@ -146,6 +154,83 @@ namespace Melkam
                 collider.onFloor = ny >= s_settings.floorDot;
                 collider.onCeiling = ny <= -s_settings.floorDot;
                 collider.onWall = std::abs(nx) >= s_settings.floorDot || std::abs(nz) >= s_settings.floorDot;
+            }
+        }
+
+        bool isTriggerLike(const Entity &entity, const ColliderComponent *collider)
+        {
+            if (!collider)
+            {
+                return false;
+            }
+
+            if (collider->isTrigger)
+            {
+                return true;
+            }
+
+            if (collider->is2D)
+            {
+                return entity.tryGetComponent<Area2DComponent>() != nullptr;
+            }
+
+            return entity.tryGetComponent<Area3DComponent>() != nullptr;
+        }
+
+        void emitCollision(Scene *scene, EntityId selfId, EntityId otherId, float nx, float ny, float nz, float travel)
+        {
+            if (!scene || !scene->isValid(selfId) || !scene->isValid(otherId))
+            {
+                return;
+            }
+
+            auto it = s_collisionCallbacks.find(selfId);
+            if (it == s_collisionCallbacks.end())
+            {
+                return;
+            }
+
+            CollisionInfo info{};
+            info.hit = true;
+            info.collider = otherId;
+            info.normal[0] = nx;
+            info.normal[1] = ny;
+            info.normal[2] = nz;
+            info.travel = travel;
+
+            Entity self(scene, selfId);
+            Entity other(scene, otherId);
+            for (const auto &callback : it->second)
+            {
+                if (callback)
+                {
+                    callback(self, other, info);
+                }
+            }
+        }
+
+        void emitArea(Scene *scene, const std::unordered_map<EntityId, std::vector<AreaCallback>> &callbacks,
+                      EntityId areaId, EntityId bodyId)
+        {
+            if (!scene || !scene->isValid(areaId) || !scene->isValid(bodyId))
+            {
+                return;
+            }
+
+            auto it = callbacks.find(areaId);
+            if (it == callbacks.end())
+            {
+                return;
+            }
+
+            Entity area(scene, areaId);
+            Entity body(scene, bodyId);
+            for (const auto &callback : it->second)
+            {
+                if (callback)
+                {
+                    callback(area, body);
+                }
             }
         }
 
@@ -407,6 +492,201 @@ namespace Melkam
             return true;
         }
 
+        class AreaSignalSystem : public System
+        {
+        public:
+            void onUpdate(Scene &scene, float dt) override
+            {
+                (void)dt;
+                update2D(scene);
+                update3D(scene);
+            }
+
+        private:
+            void update2D(Scene &scene)
+            {
+                std::unordered_set<EntityId> activeAreas;
+                auto bodies = scene.view<TransformComponent, ColliderComponent>();
+
+                for (auto &area : scene.view<TransformComponent, ColliderComponent, Area2DComponent>())
+                {
+                    auto *areaTransform = area.tryGetComponent<TransformComponent>();
+                    auto *areaCollider = area.tryGetComponent<ColliderComponent>();
+                    if (!areaTransform || !areaCollider || !areaCollider->is2D)
+                    {
+                        continue;
+                    }
+
+                    Aabb2D areaBox;
+                    if (!getAabb2D(area, *areaTransform, areaBox))
+                    {
+                        continue;
+                    }
+
+                    activeAreas.insert(area.id());
+                    auto &previous = m_prev2D[area.id()];
+                    std::unordered_set<EntityId> current;
+
+                    for (auto &body : bodies)
+                    {
+                        if (body.id() == area.id())
+                        {
+                            continue;
+                        }
+
+                        auto *bodyCollider = body.tryGetComponent<ColliderComponent>();
+                        auto *bodyTransform = body.tryGetComponent<TransformComponent>();
+                        if (!bodyCollider || !bodyTransform || !bodyCollider->is2D)
+                        {
+                            continue;
+                        }
+
+                        if (bodyCollider->isTrigger || body.tryGetComponent<Area2DComponent>())
+                        {
+                            continue;
+                        }
+
+                        if (!shouldCollide(area.tryGetComponent<CollisionLayerComponent>(), body.tryGetComponent<CollisionLayerComponent>()))
+                        {
+                            continue;
+                        }
+
+                        Aabb2D bodyBox;
+                        if (!getAabb2D(body, *bodyTransform, bodyBox))
+                        {
+                            continue;
+                        }
+
+                        if (!intersects(areaBox, bodyBox))
+                        {
+                            continue;
+                        }
+
+                        current.insert(body.id());
+                        if (previous.find(body.id()) == previous.end())
+                        {
+                            emitArea(&scene, s_areaEnterCallbacks, area.id(), body.id());
+                        }
+                    }
+
+                    for (EntityId prevBody : previous)
+                    {
+                        if (current.find(prevBody) == current.end())
+                        {
+                            emitArea(&scene, s_areaExitCallbacks, area.id(), prevBody);
+                        }
+                    }
+
+                    previous = std::move(current);
+                }
+
+                for (auto it = m_prev2D.begin(); it != m_prev2D.end();)
+                {
+                    if (activeAreas.find(it->first) == activeAreas.end())
+                    {
+                        it = m_prev2D.erase(it);
+                    }
+                    else
+                    {
+                        ++it;
+                    }
+                }
+            }
+
+            void update3D(Scene &scene)
+            {
+                std::unordered_set<EntityId> activeAreas;
+                auto bodies = scene.view<TransformComponent, ColliderComponent>();
+
+                for (auto &area : scene.view<TransformComponent, ColliderComponent, Area3DComponent>())
+                {
+                    auto *areaTransform = area.tryGetComponent<TransformComponent>();
+                    auto *areaCollider = area.tryGetComponent<ColliderComponent>();
+                    if (!areaTransform || !areaCollider || areaCollider->is2D)
+                    {
+                        continue;
+                    }
+
+                    Aabb3D areaBox;
+                    if (!getAabb3D(area, *areaTransform, areaBox))
+                    {
+                        continue;
+                    }
+
+                    activeAreas.insert(area.id());
+                    auto &previous = m_prev3D[area.id()];
+                    std::unordered_set<EntityId> current;
+
+                    for (auto &body : bodies)
+                    {
+                        if (body.id() == area.id())
+                        {
+                            continue;
+                        }
+
+                        auto *bodyCollider = body.tryGetComponent<ColliderComponent>();
+                        auto *bodyTransform = body.tryGetComponent<TransformComponent>();
+                        if (!bodyCollider || !bodyTransform || bodyCollider->is2D)
+                        {
+                            continue;
+                        }
+
+                        if (bodyCollider->isTrigger || body.tryGetComponent<Area3DComponent>())
+                        {
+                            continue;
+                        }
+
+                        if (!shouldCollide(area.tryGetComponent<CollisionLayerComponent>(), body.tryGetComponent<CollisionLayerComponent>()))
+                        {
+                            continue;
+                        }
+
+                        Aabb3D bodyBox;
+                        if (!getAabb3D(body, *bodyTransform, bodyBox))
+                        {
+                            continue;
+                        }
+
+                        if (!intersects(areaBox, bodyBox))
+                        {
+                            continue;
+                        }
+
+                        current.insert(body.id());
+                        if (previous.find(body.id()) == previous.end())
+                        {
+                            emitArea(&scene, s_areaEnterCallbacks, area.id(), body.id());
+                        }
+                    }
+
+                    for (EntityId prevBody : previous)
+                    {
+                        if (current.find(prevBody) == current.end())
+                        {
+                            emitArea(&scene, s_areaExitCallbacks, area.id(), prevBody);
+                        }
+                    }
+
+                    previous = std::move(current);
+                }
+
+                for (auto it = m_prev3D.begin(); it != m_prev3D.end();)
+                {
+                    if (activeAreas.find(it->first) == activeAreas.end())
+                    {
+                        it = m_prev3D.erase(it);
+                    }
+                    else
+                    {
+                        ++it;
+                    }
+                }
+            }
+
+            std::unordered_map<EntityId, std::unordered_set<EntityId>> m_prev2D;
+            std::unordered_map<EntityId, std::unordered_set<EntityId>> m_prev3D;
+        };
+
         class Render3DSystem : public System
         {
         public:
@@ -562,6 +842,8 @@ namespace Melkam
                 EndShaderMode();
                 DrawGrid(20, 1.0f);
                 EndMode3D();
+                UpdateUi(scene, GetScreenWidth(), GetScreenHeight());
+                DrawUi(scene, GetScreenWidth(), GetScreenHeight());
                 EndDrawing();
             }
         };
@@ -569,6 +851,7 @@ namespace Melkam
 
     void RegisterColliderSystems(Scene &scene)
     {
+        scene.createSystem<AreaSignalSystem>();
         scene.createSystem<Render3DSystem>();
     }
 
@@ -617,6 +900,7 @@ namespace Melkam
             float hitNy = 0.0f;
             bool hit = false;
             Aabb2D hitBox{};
+            EntityId hitEntity = InvalidEntity;
 
             for (auto &other : all)
             {
@@ -633,6 +917,11 @@ namespace Melkam
                 }
 
                 if (!shouldCollide(entity.tryGetComponent<CollisionLayerComponent>(), other.tryGetComponent<CollisionLayerComponent>()))
+                {
+                    continue;
+                }
+
+                if (isTriggerLike(other, otherCollider))
                 {
                     continue;
                 }
@@ -658,6 +947,7 @@ namespace Melkam
                     hitNy = ny;
                     hit = true;
                     hitBox = otherBox;
+                    hitEntity = other.id();
                 }
             }
 
@@ -707,6 +997,13 @@ namespace Melkam
             moved = true;
 
             updateContactState(*collider, hitNx, hitNy, 0.0f, true);
+
+            if (hitEntity != InvalidEntity)
+            {
+                const float travel = std::sqrt((dx * bestTime) * (dx * bestTime) + (dy * bestTime) * (dy * bestTime));
+                emitCollision(scene, entity.id(), hitEntity, hitNx, hitNy, 0.0f, travel);
+                emitCollision(scene, hitEntity, entity.id(), -hitNx, -hitNy, 0.0f, travel);
+            }
 
             const float dot = vx * hitNx + vy * hitNy;
             vx = vx - hitNx * dot;
@@ -766,6 +1063,7 @@ namespace Melkam
             float hitNz = 0.0f;
             bool hit = false;
             Aabb3D hitBox{};
+            EntityId hitEntity = InvalidEntity;
 
             for (auto &other : all)
             {
@@ -782,6 +1080,11 @@ namespace Melkam
                 }
 
                 if (!shouldCollide(entity.tryGetComponent<CollisionLayerComponent>(), other.tryGetComponent<CollisionLayerComponent>()))
+                {
+                    continue;
+                }
+
+                if (isTriggerLike(other, otherCollider))
                 {
                     continue;
                 }
@@ -809,6 +1112,7 @@ namespace Melkam
                     hitNz = nz;
                     hit = true;
                     hitBox = otherBox;
+                    hitEntity = other.id();
                 }
             }
 
@@ -878,6 +1182,13 @@ namespace Melkam
             moved = true;
 
             updateContactState(*collider, hitNx, hitNy, hitNz, false);
+
+            if (hitEntity != InvalidEntity)
+            {
+                const float travel = std::sqrt((dx * bestTime) * (dx * bestTime) + (dy * bestTime) * (dy * bestTime) + (dz * bestTime) * (dz * bestTime));
+                emitCollision(scene, entity.id(), hitEntity, hitNx, hitNy, hitNz, travel);
+                emitCollision(scene, hitEntity, entity.id(), -hitNx, -hitNy, -hitNz, travel);
+            }
 
             const float dot = vx * hitNx + vy * hitNy + vz * hitNz;
             vx = vx - hitNx * dot;
@@ -958,6 +1269,16 @@ namespace Melkam
                 continue;
             }
 
+            if (isTriggerLike(other, otherCollider))
+            {
+                continue;
+            }
+
+            if (isTriggerLike(other, otherCollider))
+            {
+                continue;
+            }
+
             Aabb2D otherBox;
             if (!getAabb2D(other, *otherTransform, otherBox))
             {
@@ -1033,6 +1354,8 @@ namespace Melkam
         outInfo.normal[1] = collider->lastNormal[1];
         outInfo.normal[2] = collider->lastNormal[2];
         outInfo.travel = std::sqrt((dx * bestTime) * (dx * bestTime) + (dy * bestTime) * (dy * bestTime));
+        emitCollision(scene, entity.id(), hitEntity, outInfo.normal[0], outInfo.normal[1], outInfo.normal[2], outInfo.travel);
+        emitCollision(scene, hitEntity, entity.id(), -outInfo.normal[0], -outInfo.normal[1], -outInfo.normal[2], outInfo.travel);
         return true;
     }
 
@@ -1184,6 +1507,8 @@ namespace Melkam
         outInfo.normal[1] = collider->lastNormal[1];
         outInfo.normal[2] = collider->lastNormal[2];
         outInfo.travel = std::sqrt((dx * bestTime) * (dx * bestTime) + (dy * bestTime) * (dy * bestTime) + (dz * bestTime) * (dz * bestTime));
+        emitCollision(scene, entity.id(), hitEntity, outInfo.normal[0], outInfo.normal[1], outInfo.normal[2], outInfo.travel);
+        emitCollision(scene, hitEntity, entity.id(), -outInfo.normal[0], -outInfo.normal[1], -outInfo.normal[2], outInfo.travel);
         return true;
     }
 
@@ -1224,5 +1549,35 @@ namespace Melkam
         outNormal[0] = collider->lastNormal[0];
         outNormal[1] = collider->lastNormal[1];
         outNormal[2] = collider->lastNormal[2];
+    }
+
+    void ConnectCollisionSignal(Entity entity, CollisionCallback callback)
+    {
+        if (!entity.isValid())
+        {
+            return;
+        }
+
+        s_collisionCallbacks[entity.id()].push_back(std::move(callback));
+    }
+
+    void ConnectAreaBodyEntered(Entity area, AreaCallback callback)
+    {
+        if (!area.isValid())
+        {
+            return;
+        }
+
+        s_areaEnterCallbacks[area.id()].push_back(std::move(callback));
+    }
+
+    void ConnectAreaBodyExited(Entity area, AreaCallback callback)
+    {
+        if (!area.isValid())
+        {
+            return;
+        }
+
+        s_areaExitCallbacks[area.id()].push_back(std::move(callback));
     }
 }

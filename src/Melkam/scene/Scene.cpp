@@ -186,6 +186,32 @@ namespace Melkam
         m_systems.clear();
     }
 
+    void Scene::setBuilder(Builder builder)
+    {
+        m_builder = std::move(builder);
+    }
+
+    bool Scene::rebuild()
+    {
+        if (!m_builder)
+        {
+            return false;
+        }
+
+        clear();
+        m_builder(*this);
+        return true;
+    }
+
+    void Scene::clear()
+    {
+        m_components.clear();
+        m_entities.clear();
+        m_entitySet.clear();
+        m_systems.clear();
+        m_nextId = InvalidEntity;
+    }
+
     bool Scene::isValid(EntityId id) const
     {
         return m_entitySet.find(id) != m_entitySet.end();

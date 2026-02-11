@@ -58,6 +58,18 @@ namespace Melkam
                 m_activeScene->update(dt);
             }
 
+            if (m_pendingScene)
+            {
+                m_activeScene = m_pendingScene;
+                m_pendingScene.reset();
+                m_reloadRequested = false;
+            }
+            else if (m_reloadRequested && m_activeScene)
+            {
+                m_activeScene->rebuild();
+                m_reloadRequested = false;
+            }
+
             m_window->swapBuffers();
         }
 
@@ -82,6 +94,16 @@ namespace Melkam
     std::shared_ptr<Scene> Engine::activeScene() const
     {
         return m_activeScene;
+    }
+
+    void Engine::requestSceneChange(const std::shared_ptr<Scene> &scene)
+    {
+        m_pendingScene = scene;
+    }
+
+    void Engine::requestSceneReload()
+    {
+        m_reloadRequested = true;
     }
 
     EngineState Engine::state() const

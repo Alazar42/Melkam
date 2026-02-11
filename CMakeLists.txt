@@ -16,6 +16,7 @@ add_executable(Melkam
 	src/Melkam/scene/Entity.cpp
 	src/Melkam/scene/Systems2D.cpp
 	 src/Melkam/physics/Collider.cpp
+	 src/Melkam/ui/Ui.cpp
 )
 
 set(RAYLIB_INCLUDE_DIR "C:/msys64/mingw64/include")

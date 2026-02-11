@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include <Melkam/scene/Components.hpp>
 
 namespace Melkam
@@ -15,6 +17,9 @@ namespace Melkam
         float travel = 0.0f;
     };
 
+    using CollisionCallback = std::function<void(Entity self, Entity other, const CollisionInfo &info)>;
+    using AreaCallback = std::function<void(Entity area, Entity body)>;
+
     void RegisterColliderSystems(Scene &scene);
     void SetSlideSettings(float epsilon, int maxSlides);
     bool MoveAndSlide2D(Entity &entity, float dt);
@@ -27,4 +32,8 @@ namespace Melkam
     bool IsOnWall(const Entity &entity);
     bool IsOnCeiling(const Entity &entity);
     void GetFloorNormal(const Entity &entity, float outNormal[3]);
+
+    void ConnectCollisionSignal(Entity entity, CollisionCallback callback);
+    void ConnectAreaBodyEntered(Entity area, AreaCallback callback);
+    void ConnectAreaBodyExited(Entity area, AreaCallback callback);
 }
