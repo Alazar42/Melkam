@@ -118,6 +118,15 @@ public:
       setVSync(m_props.vsync);
     }
 
+    // Sync actual window size from OS (especially when maximized or fullscreen)
+    int actualW = 0, actualH = 0;
+    SDL_GetWindowSize(m_window, &actualW, &actualH);
+    if (actualW > 0 && actualH > 0) {
+      m_props.width = static_cast<uint32_t>(actualW);
+      m_props.height = static_cast<uint32_t>(actualH);
+    }
+
+    s_currentWindow = this;
     m_isOpen = true;
     return true;
   }
@@ -366,13 +375,19 @@ public:
     m_eventCallback = callback;
   }
 
-  // Returns the underlying native SDL_Window pointer.
-  SDL_Window *getNativeWindow() const { return m_window; }
-
-  // Returns the underlying native SDL_Renderer pointer.
-  SDL_Renderer *getRenderer() const { return m_renderer; }
+  // Static Window / Viewport queries
+  static Window *getCurrent() { return s_currentWindow; }
+  static Vector2 getSize() {
+    return s_currentWindow ? Vector2(static_cast<float>(s_currentWindow->getWidth()),
+                                     static_cast<float>(s_currentWindow->getHeight()))
+                           : Vector2(1280.0f, 720.0f);
+  }
+  static Vector2 getCenter() { return getSize() * 0.5f; }
+  static float getWidth() { return getSize().x; }
+  static float getHeight() { return getSize().y; }
 
 private:
+  inline static Window *s_currentWindow = nullptr;
   SDL_Window *m_window = nullptr;
   SDL_Renderer *m_renderer = nullptr;
   WindowProps m_props;

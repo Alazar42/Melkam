@@ -1,6 +1,7 @@
 #pragma once
 
 #include "input.hpp"
+#include "window.hpp"
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -18,6 +19,24 @@ public:
   Node() = default;
   explicit Node(std::string nodeName) : name(std::move(nodeName)) {}
   virtual ~Node() = default;
+
+  // Copy constructor (preserves independent tree hierarchy)
+  Node(const Node &other)
+      : name(other.name), visible(other.visible), active(other.active) {}
+
+  // Copy assignment (preserves existing parent and children)
+  Node &operator=(const Node &other) {
+    if (this != &other) {
+      name = other.name;
+      visible = other.visible;
+      active = other.active;
+    }
+    return *this;
+  }
+
+  // Returns active window viewport dimensions
+  Vector2 getViewportSize() const { return Window::getSize(); }
+  Vector2 getViewportCenter() const { return Window::getCenter(); }
 
   virtual void onReady() {}
   virtual void onProcess(float) {}
