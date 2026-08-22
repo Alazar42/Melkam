@@ -144,39 +144,21 @@ public:
         break;
 
       case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-        if (event.window.windowID == SDL_GetWindowID(m_window)) {
-          m_isOpen = false;
-        }
+        m_isOpen = false;
         break;
 
       case SDL_EVENT_WINDOW_RESIZED:
-      case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-        if (event.window.windowID == SDL_GetWindowID(m_window)) {
-          m_props.width = static_cast<uint32_t>(event.window.data1);
-          m_props.height = static_cast<uint32_t>(event.window.data2);
+      case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
+        int w = 0, h = 0;
+        if (m_window) {
+          SDL_GetWindowSize(m_window, &w, &h);
+          if (w > 0 && h > 0) {
+            m_props.width = static_cast<uint32_t>(w);
+            m_props.height = static_cast<uint32_t>(h);
+          }
         }
         break;
-
-      case SDL_EVENT_WINDOW_MAXIMIZED:
-        if (event.window.windowID == SDL_GetWindowID(m_window)) {
-          m_props.maximized = true;
-          m_props.minimized = false;
-        }
-        break;
-
-      case SDL_EVENT_WINDOW_MINIMIZED:
-        if (event.window.windowID == SDL_GetWindowID(m_window)) {
-          m_props.minimized = true;
-          m_props.maximized = false;
-        }
-        break;
-
-      case SDL_EVENT_WINDOW_RESTORED:
-        if (event.window.windowID == SDL_GetWindowID(m_window)) {
-          m_props.maximized = false;
-          m_props.minimized = false;
-        }
-        break;
+      }
 
       default:
         break;
@@ -195,9 +177,6 @@ public:
   }
 
   // Clears the window render target with an MSL Color.
-  // Example:
-  //   window.clear(Color::DARK_GRAY);
-  //   window.clear(Color::html("#1e1e24"));
   void clear(const Color &color) {
     if (m_renderer) {
       uint8_t r = static_cast<uint8_t>(std::clamp(color.r * 255.0f + 0.5f, 0.0f, 255.0f));
@@ -257,7 +236,7 @@ public:
     }
   }
 
-  // Minimizes the window to taskbar/dock.
+  // Minimizes the window.
   void minimize() {
     m_props.minimized = true;
     m_props.maximized = false;
@@ -266,7 +245,7 @@ public:
     }
   }
 
-  // Restores the window from maximized or minimized state to standard size.
+  // Restores the window from maximized or minimized state.
   void restore() {
     m_props.maximized = false;
     m_props.minimized = false;
@@ -377,14 +356,18 @@ public:
 
   // Static Window / Viewport queries
   static Window *getCurrent() { return s_currentWindow; }
-  static Vector2 getSize() {
+  static Vector2 getViewportSize() {
     return s_currentWindow ? Vector2(static_cast<float>(s_currentWindow->getWidth()),
                                      static_cast<float>(s_currentWindow->getHeight()))
                            : Vector2(1280.0f, 720.0f);
   }
-  static Vector2 getCenter() { return getSize() * 0.5f; }
-  static float getWidth() { return getSize().x; }
-  static float getHeight() { return getSize().y; }
+  static Vector2 getViewportCenter() { return getViewportSize() * 0.5f; }
+
+  // Returns the underlying native SDL_Window pointer.
+  SDL_Window *getNativeWindow() const { return m_window; }
+
+  // Returns the underlying native SDL_Renderer pointer.
+  SDL_Renderer *getRenderer() const { return m_renderer; }
 
 private:
   inline static Window *s_currentWindow = nullptr;
@@ -394,3 +377,7 @@ private:
   bool m_isOpen = false;
   EventCallbackFn m_eventCallback;
 };
+
+// Inline implementations of Node viewport queries
+inline Vector2 Node::getViewportSize() const { return Window::getViewportSize(); }
+inline Vector2 Node::getViewportCenter() const { return Window::getViewportCenter(); }

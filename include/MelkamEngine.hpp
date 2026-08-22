@@ -8,17 +8,17 @@
 // MSL - Melkam Standard Library (Color, Vector2, Vector3, String, Array)
 #include "helper/msl.hpp"
 
-// Core Engine & Runtime
-#include "core/Application.hpp"
-#include "core/Node.hpp"
-#include "core/SceneTree.hpp"
-
-// Subsystems
-#include "ECS.hpp"
-#include "audio/Audio.hpp"
+// Input, Time & Core Node
 #include "input.hpp"
 #include "time.hpp"
+#include "core/Node.hpp"
 #include "window.hpp"
+#include "audio/Audio.hpp"
+#include "ECS.hpp"
+
+// Scene Management & Runtime Application
+#include "core/SceneTree.hpp"
+#include "core/Application.hpp"
 
 // 2D Spatial Nodes & Components
 #include "nodes/2D/Camera2D.hpp"

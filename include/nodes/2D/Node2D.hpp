@@ -12,6 +12,17 @@ public:
   Node2D() : Node("Node2D") {}
   explicit Node2D(std::string nodeName) : Node(std::move(nodeName)) {}
 
+  Node2D(const Node2D &other)
+      : Node(other), transform(other.transform) {}
+
+  Node2D &operator=(const Node2D &other) {
+    if (this != &other) {
+      Node::operator=(other);
+      transform = other.transform;
+    }
+    return *this;
+  }
+
   // Sets local position.
   void setPosition(const Vector2 &pos) { transform.position = pos; }
 

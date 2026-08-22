@@ -1,13 +1,14 @@
 #pragma once
 
+#include "helper/vectors/Vector2.hpp"
 #include "input.hpp"
-#include "window.hpp"
 #include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
 
 class SceneTree;
+class Window;
 
 // Base Node class for the entire MelkamEngine Scene Tree (inspired by Godot Node architecture).
 class Node : public std::enable_shared_from_this<Node> {
@@ -34,9 +35,9 @@ public:
     return *this;
   }
 
-  // Returns active window viewport dimensions
-  Vector2 getViewportSize() const { return Window::getSize(); }
-  Vector2 getViewportCenter() const { return Window::getCenter(); }
+  // Returns active window viewport dimensions (defined after Window class)
+  Vector2 getViewportSize() const;
+  Vector2 getViewportCenter() const;
 
   virtual void onReady() {}
   virtual void onProcess(float) {}

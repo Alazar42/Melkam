@@ -36,6 +36,30 @@ public:
 
   MeshInstance2D() : Node2D("MeshInstance2D") {}
 
+  MeshInstance2D(const MeshInstance2D &other)
+      : Node2D(other), meshType(other.meshType), color(other.color),
+        filled(other.filled), texture(other.texture), size(other.size),
+        radius(other.radius), segments(other.segments), p1(other.p1),
+        p2(other.p2), p3(other.p3), vertices(other.vertices) {}
+
+  MeshInstance2D &operator=(const MeshInstance2D &other) {
+    if (this != &other) {
+      Node2D::operator=(other);
+      meshType = other.meshType;
+      color = other.color;
+      filled = other.filled;
+      texture = other.texture;
+      size = other.size;
+      radius = other.radius;
+      segments = other.segments;
+      p1 = other.p1;
+      p2 = other.p2;
+      p3 = other.p3;
+      vertices = other.vertices;
+    }
+    return *this;
+  }
+
   // Direct rectangle constructor
   MeshInstance2D(const Vector2 &rectSize, const Color &rectColor = Color::WHITE,
                  bool isFilled = true)
