@@ -14,16 +14,23 @@
 // Master Application / Game Engine Runtime (inspired by Godot's MainLoop & Engine architecture).
 class Application {
 public:
-  // Direct constructor accepting title, dimensions, maximized, fullscreen, and minimized flags
+  // Direct constructor accepting title, dimensions, maximized, stretch mode, and stretch aspect
   explicit Application(const std::string &title = "MelkamEngine",
                        uint32_t width = 1280, uint32_t height = 720,
-                       bool maximized = false, bool fullscreen = false,
+                       bool maximized = false,
+                       StretchMode stretchMode = StretchMode::CanvasItems,
+                       StretchAspect stretchAspect = StretchAspect::Keep,
+                       bool fullscreen = false,
                        bool minimized = false,
                        const Color &clearColor = Color::from_rgba8(20, 20, 25),
                        bool vsync = true, bool resizable = true) {
     m_props.title = title;
     m_props.width = width;
     m_props.height = height;
+    m_props.designWidth = width;
+    m_props.designHeight = height;
+    m_props.stretchMode = stretchMode;
+    m_props.stretchAspect = stretchAspect;
     m_props.maximized = maximized;
     m_props.fullscreen = fullscreen;
     m_props.minimized = minimized;
@@ -97,11 +104,11 @@ public:
 
       float dt = Time::getDeltaTime();
 
-      // 1. Fixed Timestep Physics Cycle
+      // 1. Fixed Timestep Physics Cycle (Node Physics Process -> Box2D Simulation Step)
       while (Time::shouldDoFixedUpdate()) {
         float fixedDt = Time::getFixedDeltaTime();
-        PhysicsServer2D::step(fixedDt);
         m_tree->physicsProcess(fixedDt);
+        PhysicsServer2D::step(fixedDt);
       }
 
       // 2. Variable Frame Update Cycle
@@ -144,6 +151,37 @@ public:
   void setClearColor(const Color &color) {
     if (m_window) {
       m_window->setClearColor(color);
+    }
+  }
+
+  // Configures Godot-style stretch mode and aspect ratio
+  void setStretch(StretchMode mode, StretchAspect aspect = StretchAspect::Keep) {
+    m_props.stretchMode = mode;
+    m_props.stretchAspect = aspect;
+    if (m_window) {
+      m_window->setStretch(mode, aspect);
+    }
+  }
+
+  void setStretchMode(StretchMode mode) {
+    m_props.stretchMode = mode;
+    if (m_window) {
+      m_window->setStretchMode(mode);
+    }
+  }
+
+  void setStretchAspect(StretchAspect aspect) {
+    m_props.stretchAspect = aspect;
+    if (m_window) {
+      m_window->setStretchAspect(aspect);
+    }
+  }
+
+  void setDesignResolution(uint32_t width, uint32_t height) {
+    m_props.designWidth = width;
+    m_props.designHeight = height;
+    if (m_window) {
+      m_window->setDesignResolution(width, height);
     }
   }
 

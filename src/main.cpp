@@ -5,7 +5,7 @@
 class PlayerNode : public CharacterBody2D {
 public:
   float speed = 350.0f;
-  float jumpVelocity = -700.0f;
+  float jumpVelocity = -750.0f;
   float gravity = 1400.0f;
 
   void onReady() override {
@@ -80,9 +80,9 @@ public:
 };
 
 int main() {
-  // 1. Create Application (maximized)
+  // 1. Create Application with Godot Stretch Mode (CanvasItems) & Aspect (Keep / Letterbox)
   Application app("MelkamEngine - Godot Signal & Scene Sandbox", 1280, 720,
-                  true);
+                  false, StretchMode::CanvasItems, StretchAspect::Keep);
 
   // 2. Ground Platform (StaticBody2D with CollisionShape2D + MeshInstance2D
   // children)
@@ -113,27 +113,24 @@ int main() {
   auto coin2 = app.addChild<CoinNode>();
   coin2->setPosition({850.0f, 320.0f});
 
-  // 4. Dynamic Crates (RigidBody2D with CollisionShape2D + MeshInstance2D children)
+  // 4. Dynamic Crates (RigidBody2D with Godot defaults: friction 1.0, bounce 0.0)
   auto crate1 = app.addChild<RigidBody2D>("Crate1");
+  crate1->lockRotation = true;
   crate1->setPosition({400.0f, 150.0f});
-  crate1->restitution = 0.05f;
-  crate1->friction = 0.6f;
   auto crate1Shape = crate1->addChild<CollisionShape2D>(Vector2(45.0f, 45.0f));
   crate1Shape->addChild<MeshInstance2D>(Vector2(45.0f, 45.0f),
                                         Color::from_rgba8(205, 133, 63));
 
   auto crate2 = app.addChild<RigidBody2D>("Crate2");
+  crate2->lockRotation = true;
   crate2->setPosition({820.0f, 100.0f});
-  crate2->restitution = 0.05f;
-  crate2->friction = 0.6f;
   auto crate2Shape = crate2->addChild<CollisionShape2D>(Vector2(40.0f, 40.0f));
   crate2Shape->addChild<MeshInstance2D>(Vector2(40.0f, 40.0f),
                                         Color::from_rgba8(220, 160, 80));
 
-  // 5. Player CharacterBody2D
   auto player = app.addChild<PlayerNode>();
   player->name = "Player";
-  player->setPosition({200.0f, 400.0f});
+  player->setPosition({300.0f, 300.0f});
 
   // 6. Run the Game
   app.run();

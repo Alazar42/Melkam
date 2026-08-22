@@ -6,12 +6,14 @@
 class RigidBody2D : public CollisionObject2D {
 public:
   float mass = 1.0f;
-  float friction = 0.3f;
-  float restitution = 0.3f; // Bounciness
+  float friction = 1.0f;     // Godot 4 default friction is 1.0
+  float restitution = 0.0f;  // Godot 4 default bounce is 0.0
   float linearDamping = 0.0f;
-  float angularDamping = 0.1f;
+  float angularDamping = 0.0f;
   float gravityScale = 1.0f;
   bool lockRotation = false;
+
+  bool isDynamicBody() const override { return true; }
 
   RigidBody2D() : CollisionObject2D("RigidBody2D") {}
   explicit RigidBody2D(std::string nodeName)

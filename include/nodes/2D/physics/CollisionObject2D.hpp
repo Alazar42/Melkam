@@ -32,6 +32,24 @@ public:
   Color visualColor = Color::WHITE;
   bool visualFilled = true;
 
+  virtual Vector2 getHalfExtents() const {
+    if (shapeType == CollisionShapeType::Circle) {
+      return {shapeRadius, shapeRadius};
+    }
+    return shapeSize * 0.5f;
+  }
+
+  virtual bool isSensorBody() const { return false; }
+  virtual bool isDynamicBody() const { return false; }
+
+  Vector2 getGlobalPhysicsPosition() const {
+    if (isBodyValid() && isDynamicBody()) {
+      b2Vec2 pos = b2Body_GetPosition(m_bodyId);
+      return PhysicsServer2D::toPixels(pos);
+    }
+    return getGlobalPosition();
+  }
+
   CollisionObject2D() : Node2D("CollisionObject2D") {
     PhysicsServer2D::registerObject(this);
   }
@@ -295,7 +313,7 @@ protected:
   }
 
   b2BodyId m_bodyId = b2_nullBodyId;
-  b2ShapeId m_shapeId = b2_nullShapeId;
+    b2ShapeId m_shapeId = b2_nullShapeId;
 };
 
 // Inline definition of CollisionShape2D::onReady()
@@ -307,5 +325,14 @@ inline void CollisionShape2D::onReady() {
       break;
     }
     curr = curr->getParent();
+  }
+}
+
+// Inline definition of PhysicsServer2D::syncRegisteredObjects()
+inline void PhysicsServer2D::syncRegisteredObjects() {
+  for (CollisionObject2D *obj : s_registeredObjects) {
+    if (obj && obj->isBodyValid() && obj->isDynamicBody()) {
+      obj->syncFromPhysics();
+    }
   }
 }

@@ -54,13 +54,17 @@ public:
     s_registeredObjects.clear();
   }
 
-  // Steps the Box2D physics simulation and dispatches sensor events
+  // Steps the Box2D physics simulation and syncs node transforms
   static void step(float fixedDeltaTime, int subSteps = 4) {
     if (!b2World_IsValid(s_worldId)) {
       init();
     }
     b2World_Step(s_worldId, fixedDeltaTime, subSteps);
+    syncRegisteredObjects();
   }
+
+  // Declared here, defined after CollisionObject2D
+  static void syncRegisteredObjects();
 
   // Returns the Box2D world handle
   static b2WorldId getWorldId() {

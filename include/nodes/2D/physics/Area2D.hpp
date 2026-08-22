@@ -32,6 +32,8 @@ public:
   float linearDamp = 0.1f;
   float angularDamp = 0.1f;
 
+  bool isSensorBody() const override { return true; }
+
   // Constructors
   Area2D() : CollisionObject2D("Area2D") {}
   explicit Area2D(std::string nodeName)

@@ -10,17 +10,37 @@
 #include <string>
 #include <utility>
 
+// Godot-style Window Stretch Modes
+enum class StretchMode {
+  Disabled,    // 1 virtual pixel = 1 screen pixel (no scaling)
+  CanvasItems, // Scales 2D canvas elements with subpixel precision
+  Viewport     // Renders at fixed virtual resolution and stretches
+};
+
+// Godot-style Window Stretch Aspects
+enum class StretchAspect {
+  Ignore,     // Stretches to fill entire window without preserving aspect ratio
+  Keep,       // Preserves aspect ratio with letterbox/pillarbox (black bars)
+  KeepWidth,  // Fixes width, expands/contracts height
+  KeepHeight, // Fixes height, expands/contracts width
+  Expand      // Preserves aspect ratio, expands visible canvas area
+};
+
 // Configuration properties for window creation.
 struct WindowProps {
   std::string title = "MelkamEngine";
   uint32_t width = 1280;
   uint32_t height = 720;
+  uint32_t designWidth = 1280;  // Virtual design resolution width
+  uint32_t designHeight = 720; // Virtual design resolution height
   bool vsync = true;
   bool resizable = true;
   bool fullscreen = false;
   Color clearColor = Color::from_rgba8(25, 25, 30);
   bool maximized = false;
   bool minimized = false;
+  StretchMode stretchMode = StretchMode::CanvasItems;
+  StretchAspect stretchAspect = StretchAspect::Keep;
 };
 
 // Custom Window class managing an SDL3 Window, Renderer, and Event loop.
@@ -116,6 +136,8 @@ public:
     } else {
       // Configure VSync
       setVSync(m_props.vsync);
+      // Configure Godot-style stretch and viewport scaling
+      applyLogicalPresentation();
     }
 
     // Sync actual window size from OS (especially when maximized or fullscreen)
@@ -137,6 +159,9 @@ public:
     Input::nextFrame();
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+      if (m_renderer && m_props.stretchMode != StretchMode::Disabled) {
+        SDL_ConvertEventToRenderCoordinates(m_renderer, &event);
+      }
       Input::onEvent(event);
       switch (event.type) {
       case SDL_EVENT_QUIT:
@@ -349,6 +374,70 @@ public:
   // Returns true if the window is resizable.
   bool isResizable() const { return m_props.resizable; }
 
+  // Configures SDL3 hardware render scaling to match Godot stretch modes
+  void applyLogicalPresentation() {
+    if (!m_renderer) return;
+
+    if (m_props.stretchMode == StretchMode::Disabled) {
+      SDL_SetRenderLogicalPresentation(m_renderer, 0, 0,
+                                       SDL_LOGICAL_PRESENTATION_DISABLED);
+      return;
+    }
+
+    SDL_RendererLogicalPresentation mode = SDL_LOGICAL_PRESENTATION_LETTERBOX;
+    switch (m_props.stretchAspect) {
+    case StretchAspect::Ignore:
+      mode = SDL_LOGICAL_PRESENTATION_STRETCH;
+      break;
+    case StretchAspect::Keep:
+    case StretchAspect::KeepWidth:
+    case StretchAspect::KeepHeight:
+      mode = (m_props.stretchMode == StretchMode::Viewport)
+                 ? SDL_LOGICAL_PRESENTATION_INTEGER_SCALE
+                 : SDL_LOGICAL_PRESENTATION_LETTERBOX;
+      break;
+    case StretchAspect::Expand:
+      mode = SDL_LOGICAL_PRESENTATION_OVERSCAN;
+      break;
+    }
+
+    SDL_SetRenderLogicalPresentation(
+        m_renderer, static_cast<int>(m_props.designWidth),
+        static_cast<int>(m_props.designHeight), mode);
+  }
+
+  // Sets Godot-style stretch mode and aspect ratio
+  void setStretch(StretchMode mode, StretchAspect aspect = StretchAspect::Keep) {
+    m_props.stretchMode = mode;
+    m_props.stretchAspect = aspect;
+    applyLogicalPresentation();
+  }
+
+  void setStretchMode(StretchMode mode) {
+    m_props.stretchMode = mode;
+    applyLogicalPresentation();
+  }
+
+  StretchMode getStretchMode() const { return m_props.stretchMode; }
+
+  void setStretchAspect(StretchAspect aspect) {
+    m_props.stretchAspect = aspect;
+    applyLogicalPresentation();
+  }
+
+  StretchAspect getStretchAspect() const { return m_props.stretchAspect; }
+
+  void setDesignResolution(uint32_t width, uint32_t height) {
+    m_props.designWidth = width;
+    m_props.designHeight = height;
+    applyLogicalPresentation();
+  }
+
+  Vector2 getDesignResolution() const {
+    return {static_cast<float>(m_props.designWidth),
+            static_cast<float>(m_props.designHeight)};
+  }
+
   // Registers a callback to receive all raw polled SDL events.
   void setEventCallback(const EventCallbackFn &callback) {
     m_eventCallback = callback;
@@ -357,9 +446,14 @@ public:
   // Static Window / Viewport queries
   static Window *getCurrent() { return s_currentWindow; }
   static Vector2 getViewportSize() {
-    return s_currentWindow ? Vector2(static_cast<float>(s_currentWindow->getWidth()),
-                                     static_cast<float>(s_currentWindow->getHeight()))
-                           : Vector2(1280.0f, 720.0f);
+    if (s_currentWindow) {
+      if (s_currentWindow->m_props.stretchMode != StretchMode::Disabled) {
+        return s_currentWindow->getDesignResolution();
+      }
+      return Vector2(static_cast<float>(s_currentWindow->getWidth()),
+                     static_cast<float>(s_currentWindow->getHeight()));
+    }
+    return Vector2(1280.0f, 720.0f);
   }
   static Vector2 getViewportCenter() { return getViewportSize() * 0.5f; }
 
