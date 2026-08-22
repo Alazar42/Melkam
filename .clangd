@@ -1,0 +1,7 @@
+CompileFlags:
+  Add:
+    - -std=c++17
+    - -Iinclude
+    - -Iinclude/helper
+    - -IC:/Users/Micky/.conan2/p/entt66a43c2152748/p/include
+    - -IC:/Users/Micky/.conan2/p/b/sdlbbaafa0b40750/p/include

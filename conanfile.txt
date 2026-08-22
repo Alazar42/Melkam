@@ -1,0 +1,8 @@
+[requires]
+entt/3.16.0
+sdl/3.4.14
+[generators]
+CMakeDeps
+CMakeToolchain
+[layout]
+cmake_layout
