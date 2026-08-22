@@ -2,6 +2,7 @@
 
 #include "ECS.hpp"
 #include "audio/Audio.hpp"
+#include "core/BootSplash.hpp"
 #include "core/SceneTree.hpp"
 #include "input.hpp"
 #include "renderers/Renderer2D.hpp"
@@ -14,6 +15,7 @@
 // Master Application / Game Engine Runtime (inspired by Godot's MainLoop & Engine architecture).
 class Application {
 public:
+  BootSplashConfig bootSplash{};
   // Direct constructor accepting title, dimensions, maximized, stretch mode, and stretch aspect
   explicit Application(const std::string &title = "MelkamEngine",
                        uint32_t width = 1280, uint32_t height = 720,
@@ -92,6 +94,9 @@ public:
     Renderer2D::init(*m_window);
     Audio::init();
     PhysicsServer2D::init();
+
+    // Godot-style Boot Splash Presentation
+    BootSplash::run(*m_window, bootSplash);
 
     // User initialization
     onInit();
@@ -183,6 +188,15 @@ public:
     if (m_window) {
       m_window->setDesignResolution(width, height);
     }
+  }
+
+  // Configures Godot-style Boot Splash
+  void setBootSplash(const BootSplashConfig &config) {
+    bootSplash = config;
+  }
+
+  void setBootSplashEnabled(bool enabled) {
+    bootSplash.enabled = enabled;
   }
 
   // Fullscreen controls

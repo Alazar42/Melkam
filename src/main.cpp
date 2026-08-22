@@ -1,12 +1,14 @@
 #include "MelkamEngine.hpp"
 
-// 1. Controllable Player Character (CharacterBody2D with CollisionShape2D &
-// MeshInstance2D children)
+// 1. Controllable Player Character (CharacterBody2D with CollisionShape2D,
+// Mesh, & AudioStreamPlayer2D)
 class PlayerNode : public CharacterBody2D {
 public:
   float speed = 350.0f;
   float jumpVelocity = -750.0f;
   float gravity = 1400.0f;
+
+  std::shared_ptr<AudioStreamPlayer2D> jumpAudio = nullptr;
 
   void onReady() override {
     // 1. Attach CollisionShape2D child using addChild
@@ -32,6 +34,9 @@ public:
         isOnFloor()) {
       velocity.y = jumpVelocity;
       setOnFloor(false);
+      if (jumpAudio) {
+        jumpAudio->play();
+      }
     }
 
     // 3. Horizontal Movement (A / D)
@@ -43,29 +48,31 @@ public:
 
     // Fall reset if falling off screen
     if (getPosition().y > 900.0f) {
-      setPosition({200.0f, 300.0f});
+      setPosition({300.0f, 300.0f});
       velocity = {0.0f, 0.0f};
     }
   }
 };
 
-// 2. Collectible Coin Trigger (Area2D with Godot body_entered Signal)
+// 2. Collectible Coin Trigger (Area2D with Godot body_entered Signal &
+// AudioStreamPlayer2D)
 class CoinNode : public Area2D {
 public:
+  std::shared_ptr<AudioStreamPlayer2D> coinAudio = nullptr;
+
   void onReady() override {
     // 1. Circle collision shape child
-    auto colShape = addChild<CollisionShape2D>(15.0f);
+    auto colShape = addChild<CollisionShape2D>(16.0f);
 
     // 2. Visual mesh attached as a child of the collision shape
-    colShape->addChild<MeshInstance2D>(15.0f,
-                                       Color::from_rgba8(255, 215, 0, 220));
+    colShape->addChild<MeshInstance2D>(16.0f,
+                                       Color::from_rgba8(255, 215, 0, 230));
 
-    // 3. Connect to Godot-style Signal body_entered
+    // 4. Connect to Godot-style Signal body_entered
     body_entered.connect([this](Node2D *body) {
       if (body && body->name == "Player") {
-        SDL_Log("=== [SIGNAL FIRED] Coin collected by %s! ===", body->name.c_str());
-        std::cout << "=== [SIGNAL FIRED] Coin collected by " << body->name << "! ===" << std::endl;
-        std::flush(std::cout);
+        std::cout << "=== [SIGNAL FIRED] Coin collected by " << body->name
+                  << "! ===" << std::endl;
         visible = false;    // Coin collected!
         monitoring = false; // Stop monitoring
       }
@@ -80,9 +87,11 @@ public:
 };
 
 int main() {
-  // 1. Create Application with Godot Stretch Mode (CanvasItems) & Aspect (Keep / Letterbox)
-  Application app("MelkamEngine - Godot Signal & Scene Sandbox", 1280, 720,
-                  false, StretchMode::CanvasItems, StretchAspect::Keep);
+  // 1. Create Application with Godot Stretch Mode (CanvasItems) & Aspect (Keep
+  // / Letterbox)
+  Application app("MelkamEngine - Godot Signal, Animation & Audio Sandbox",
+                  1280, 720, true, StretchMode::CanvasItems,
+                  StretchAspect::Keep);
 
   // 2. Ground Platform (StaticBody2D with CollisionShape2D + MeshInstance2D
   // children)
@@ -106,14 +115,15 @@ int main() {
   plat2Shape->addChild<MeshInstance2D>(Vector2(250.0f, 30.0f),
                                        Color::from_rgba8(90, 90, 115));
 
-  // 3. Collectible Coins (Area2D with Signal connection)
+  // 3. Collectible Coins (Area2D with Signal connection & 2D spatial audio)
   auto coin1 = app.addChild<CoinNode>();
   coin1->setPosition({350.0f, 440.0f});
 
   auto coin2 = app.addChild<CoinNode>();
   coin2->setPosition({850.0f, 320.0f});
 
-  // 4. Dynamic Crates (RigidBody2D with Godot defaults: friction 1.0, bounce 0.0)
+  // 4. Dynamic Crates (RigidBody2D with Godot defaults: friction 1.0, bounce
+  // 0.0)
   auto crate1 = app.addChild<RigidBody2D>("Crate1");
   crate1->lockRotation = true;
   crate1->setPosition({400.0f, 150.0f});
@@ -128,6 +138,7 @@ int main() {
   crate2Shape->addChild<MeshInstance2D>(Vector2(40.0f, 40.0f),
                                         Color::from_rgba8(220, 160, 80));
 
+  // 5. Player CharacterBody2D
   auto player = app.addChild<PlayerNode>();
   player->name = "Player";
   player->setPosition({300.0f, 300.0f});

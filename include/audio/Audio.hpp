@@ -1,31 +1,33 @@
 #pragma once
 
+#include "helper/vectors/Vector2.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
 
-// Sound effect loaded in memory.
-class Sound {
+// Audio Stream Resource (inspired by Godot AudioStream) containing raw audio data.
+class AudioStream {
 public:
-  Sound() = default;
+  AudioStream() = default;
 
-  explicit Sound(const std::string &filePath) {
+  explicit AudioStream(const std::string &filePath) {
     loadFromFile(filePath);
   }
 
-  ~Sound() {
+  ~AudioStream() {
     unload();
   }
 
   // Non-copyable
-  Sound(const Sound &) = delete;
-  Sound &operator=(const Sound &) = delete;
+  AudioStream(const AudioStream &) = delete;
+  AudioStream &operator=(const AudioStream &) = delete;
 
   // Move-constructible
-  Sound(Sound &&other) noexcept
+  AudioStream(AudioStream &&other) noexcept
       : m_buffer(other.m_buffer), m_length(other.m_length),
         m_spec(other.m_spec), m_path(std::move(other.m_path)) {
     other.m_buffer = nullptr;
@@ -33,7 +35,7 @@ public:
   }
 
   // Move-assignable
-  Sound &operator=(Sound &&other) noexcept {
+  AudioStream &operator=(AudioStream &&other) noexcept {
     if (this != &other) {
       unload();
       m_buffer = other.m_buffer;
@@ -47,13 +49,13 @@ public:
     return *this;
   }
 
-  // Loads a WAV sound effect into memory.
+  // Loads a WAV audio file into memory.
   bool loadFromFile(const std::string &filePath) {
     unload();
     m_path = filePath;
 
     if (!SDL_LoadWAV(filePath.c_str(), &m_spec, &m_buffer, &m_length)) {
-      std::cerr << "[Audio Error] Failed to load sound '" << filePath
+      std::cerr << "[AudioStream Error] Failed to load audio '" << filePath
                 << "': " << SDL_GetError() << std::endl;
       return false;
     }
@@ -75,6 +77,14 @@ public:
   const SDL_AudioSpec &getSpec() const { return m_spec; }
   const std::string &getPath() const { return m_path; }
 
+  // Returns playback duration in seconds.
+  float getLengthSeconds() const {
+    if (!isValid() || m_spec.freq <= 0 || m_spec.channels <= 0) return 0.0f;
+    int bytesPerSample = (m_spec.format == SDL_AUDIO_S16LE || m_spec.format == SDL_AUDIO_S16BE) ? 2 : 4;
+    int totalSamples = m_length / (bytesPerSample * m_spec.channels);
+    return static_cast<float>(totalSamples) / static_cast<float>(m_spec.freq);
+  }
+
 private:
   uint8_t *m_buffer = nullptr;
   uint32_t m_length = 0;
@@ -82,7 +92,10 @@ private:
   std::string m_path;
 };
 
-// High-performance SDL3 Audio subsystem for sound effects and music playback.
+// Backwards compatibility alias
+using Sound = AudioStream;
+
+// High-performance SDL3 Audio subsystem for sound effects, spatial nodes, and music playback.
 class Audio {
 public:
   // Initializes the audio device and subsystem.
@@ -115,17 +128,30 @@ public:
     s_initialized = false;
   }
 
-  // Plays a loaded Sound instance.
-  static void play(const Sound &sound, float volume = 1.0f) {
-    if (!s_initialized || !sound.isValid() || !s_deviceId) return;
+  // Returns active SDL audio device ID.
+  static SDL_AudioDeviceID getDeviceId() { return s_deviceId; }
+  static bool isInitialized() { return s_initialized; }
 
-    SDL_AudioStream *stream = SDL_CreateAudioStream(&sound.getSpec(), nullptr);
-    if (!stream) return;
+  // Creates and binds a new native SDL_AudioStream to the default audio device.
+  static SDL_AudioStream *createAudioStream(const SDL_AudioSpec &spec) {
+    if (!s_initialized || !s_deviceId) return nullptr;
+
+    SDL_AudioStream *stream = SDL_CreateAudioStream(&spec, nullptr);
+    if (!stream) return nullptr;
 
     if (!SDL_BindAudioStream(s_deviceId, stream)) {
       SDL_DestroyAudioStream(stream);
-      return;
+      return nullptr;
     }
+    return stream;
+  }
+
+  // Plays a loaded AudioStream directly once (one-shot).
+  static void play(const AudioStream &sound, float volume = 1.0f) {
+    if (!s_initialized || !sound.isValid() || !s_deviceId) return;
+
+    SDL_AudioStream *stream = createAudioStream(sound.getSpec());
+    if (!stream) return;
 
     float finalVol = std::clamp(volume * s_masterVolume, 0.0f, 1.0f);
     SDL_SetAudioStreamGain(stream, finalVol);
@@ -135,7 +161,7 @@ public:
 
   // Plays a sound from file directly.
   static void play(const std::string &filePath, float volume = 1.0f) {
-    Sound sound(filePath);
+    AudioStream sound(filePath);
     play(sound, volume);
   }
 
@@ -146,17 +172,11 @@ public:
 
     stopMusic();
 
-    s_musicSound = std::make_unique<Sound>(filePath);
+    s_musicSound = std::make_unique<AudioStream>(filePath);
     if (!s_musicSound->isValid()) return;
 
-    s_musicStream = SDL_CreateAudioStream(&s_musicSound->getSpec(), nullptr);
+    s_musicStream = createAudioStream(s_musicSound->getSpec());
     if (!s_musicStream) return;
-
-    if (!SDL_BindAudioStream(s_deviceId, s_musicStream)) {
-      SDL_DestroyAudioStream(s_musicStream);
-      s_musicStream = nullptr;
-      return;
-    }
 
     s_musicVolume = volume;
     s_musicLooping = loop;
@@ -173,7 +193,6 @@ public:
       return;
     }
 
-    // If stream has emptied or has less data than 100ms, queue next loop
     if (SDL_GetAudioStreamAvailable(s_musicStream) == 0) {
       SDL_PutAudioStreamData(s_musicStream, s_musicSound->getBuffer(),
                              s_musicSound->getLength());
@@ -200,12 +219,17 @@ public:
   // Returns current master volume.
   static float getMasterVolume() { return s_masterVolume; }
 
+  // Global listener position for 2D spatial audio
+  static void setListenerPosition(const Vector2 &pos) { s_listenerPos = pos; }
+  static const Vector2 &getListenerPosition() { return s_listenerPos; }
+
 private:
   inline static SDL_AudioDeviceID s_deviceId = 0;
   inline static bool s_initialized = false;
   inline static float s_masterVolume = 1.0f;
+  inline static Vector2 s_listenerPos{640.0f, 360.0f};
 
-  inline static std::unique_ptr<Sound> s_musicSound = nullptr;
+  inline static std::unique_ptr<AudioStream> s_musicSound = nullptr;
   inline static SDL_AudioStream *s_musicStream = nullptr;
   inline static float s_musicVolume = 1.0f;
   inline static bool s_musicLooping = false;

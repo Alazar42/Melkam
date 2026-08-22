@@ -279,6 +279,45 @@ public:
     }
   }
 
+  // Draws a sub-region of a 2D texture (for sprite sheets / texture atlases).
+  static void drawTextureRegion(const Texture2D &texture, const Rect2 &srcRect,
+                                const Vector2 &position, const Vector2 &size,
+                                const Color &tint = Color::WHITE,
+                                float rotationRadians = 0.0f, bool flipH = false,
+                                bool flipV = false) {
+    if (!s_renderer || !texture.isValid()) return;
+
+    SDL_Texture *nativeTex = texture.getNativeTexture();
+    SDL_SetTextureColorModFloat(nativeTex, tint.r, tint.g, tint.b);
+    SDL_SetTextureAlphaModFloat(nativeTex, tint.a);
+
+    Vector2 screenPos = toScreen(position);
+    Vector2 screenSize = s_activeCamera ? (size * s_activeCamera->zoom) : size;
+    SDL_FRect dstRect{screenPos.x, screenPos.y, screenSize.x, screenSize.y};
+    SDL_FRect sdlSrcRect{srcRect.position.x, srcRect.position.y, srcRect.size.x, srcRect.size.y};
+    const SDL_FRect *srcPtr = (srcRect.hasArea()) ? &sdlSrcRect : nullptr;
+
+    float totalRot = rotationRadians + (s_activeCamera ? s_activeCamera->getRotation() : 0.0f);
+    float angleDegrees = totalRot * (180.0f / 3.14159265358979323846f);
+
+    SDL_FlipMode flip = SDL_FLIP_NONE;
+    if (flipH && flipV) {
+      flip = static_cast<SDL_FlipMode>(SDL_FLIP_HORIZONTAL | SDL_FLIP_VERTICAL);
+    } else if (flipH) {
+      flip = SDL_FLIP_HORIZONTAL;
+    } else if (flipV) {
+      flip = SDL_FLIP_VERTICAL;
+    }
+
+    if (totalRot == 0.0f && flip == SDL_FLIP_NONE) {
+      SDL_RenderTexture(s_renderer, nativeTex, srcPtr, &dstRect);
+    } else {
+      SDL_FPoint center{screenSize.x * 0.5f, screenSize.y * 0.5f};
+      SDL_RenderTextureRotated(s_renderer, nativeTex, srcPtr, &dstRect,
+                               angleDegrees, &center, flip);
+    }
+  }
+
 private:
   // Converts world position to active screen coordinate.
   static Vector2 toScreen(const Vector2 &worldPos) {

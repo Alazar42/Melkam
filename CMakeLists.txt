@@ -15,6 +15,7 @@ find_package(box2d REQUIRED)
 
 add_executable(MelkamEngine
     src/main.cpp
+    src/stb_impl.cpp
 )
 
 target_include_directories(MelkamEngine PUBLIC include include/helper)

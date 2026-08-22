@@ -1,20 +1,26 @@
 #pragma once
 
+#include "helper/Rect2.hpp"
 #include "helper/color/Color.hpp"
+#include "helper/nanosvg.h"
+#include "helper/nanosvgrast.h"
+#include "helper/stb_image.h"
 #include "helper/vectors/Vector2.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
 
-// 2D Hardware GPU Texture representation.
+// 2D Hardware GPU Texture representation with SVG/PNG/JPG/BMP/TGA decoding.
 class Texture2D {
 public:
   Texture2D() = default;
 
-  // Constructs and loads a texture from an image file (e.g. BMP).
+  // Constructs and loads a texture from an image file (SVG, PNG, JPG, BMP, TGA).
   Texture2D(const std::string &filePath, SDL_Renderer *renderer = nullptr) {
     loadFromFile(filePath, renderer);
   }
@@ -53,7 +59,7 @@ public:
     return *this;
   }
 
-  // Loads a texture from an image file path.
+  // Loads a texture from an image or vector file path (SVG, PNG, JPG, BMP, TGA).
   bool loadFromFile(const std::string &filePath, SDL_Renderer *renderer = nullptr) {
     destroy();
     m_path = filePath;
@@ -68,28 +74,86 @@ public:
       return false;
     }
 
-    // Load surface using SDL3
-    SDL_Surface *surface = SDL_LoadBMP(filePath.c_str());
-    if (!surface) {
-      std::cerr << "[Texture2D Error] Failed to load image '" << filePath
-                << "': " << SDL_GetError() << std::endl;
-      return false;
+    std::string actualPath = filePath;
+    if (!std::filesystem::exists(actualPath)) {
+      if (std::filesystem::exists("../" + actualPath)) actualPath = "../" + actualPath;
+      else if (std::filesystem::exists("../../" + actualPath)) actualPath = "../../" + actualPath;
     }
 
-    m_width = surface->w;
-    m_height = surface->h;
+    // 1. Check for SVG Vector Format
+    if (actualPath.size() >= 4 &&
+        (actualPath.compare(actualPath.size() - 4, 4, ".svg") == 0 ||
+         actualPath.compare(actualPath.size() - 4, 4, ".SVG") == 0)) {
+      NSVGimage *svgImage = nsvgParseFromFile(actualPath.c_str(), "px", 96.0f);
+      if (svgImage) {
+        int w = static_cast<int>(svgImage->width);
+        int h = static_cast<int>(svgImage->height);
+        if (w <= 0) w = 1000;
+        if (h <= 0) h = 1000;
 
-    // Create hardware texture from surface
-    m_texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_DestroySurface(surface);
+        NSVGrasterizer *rast = nsvgCreateRasterizer();
+        if (rast) {
+          std::vector<unsigned char> imgData(w * h * 4, 0);
+          nsvgRasterize(rast, svgImage, 0.0f, 0.0f, 1.0f, imgData.data(), w, h, w * 4);
+          nsvgDeleteRasterizer(rast);
 
-    if (!m_texture) {
-      std::cerr << "[Texture2D Error] Failed to create texture from surface: "
-                << SDL_GetError() << std::endl;
-      return false;
+          SDL_Surface *surface = SDL_CreateSurfaceFrom(
+              w, h, SDL_PIXELFORMAT_RGBA32, imgData.data(), w * 4);
+          if (surface) {
+            m_width = w;
+            m_height = h;
+            m_texture = SDL_CreateTextureFromSurface(renderer, surface);
+            SDL_DestroySurface(surface);
+          }
+        }
+        nsvgDelete(svgImage);
+
+        if (m_texture) {
+          SDL_SetTextureBlendMode(m_texture, SDL_BLENDMODE_BLEND);
+          return true;
+        }
+      }
     }
 
-    return true;
+    // 2. Try loading with STB Image (PNG, JPG, BMP, TGA)
+    int width = 0, height = 0, channels = 0;
+    unsigned char *data = stbi_load(actualPath.c_str(), &width, &height, &channels, 4);
+
+    if (data && width > 0 && height > 0) {
+      SDL_Surface *surface = SDL_CreateSurfaceFrom(
+          width, height, SDL_PIXELFORMAT_RGBA32, data, width * 4);
+
+      if (surface) {
+        m_width = width;
+        m_height = height;
+        m_texture = SDL_CreateTextureFromSurface(renderer, surface);
+        SDL_DestroySurface(surface);
+      }
+      stbi_image_free(data);
+
+      if (m_texture) {
+        SDL_SetTextureBlendMode(m_texture, SDL_BLENDMODE_BLEND);
+        return true;
+      }
+    }
+
+    // 2. Fallback to native SDL BMP loader
+    SDL_Surface *fallbackSurface = SDL_LoadBMP(filePath.c_str());
+    if (fallbackSurface) {
+      m_width = fallbackSurface->w;
+      m_height = fallbackSurface->h;
+      m_texture = SDL_CreateTextureFromSurface(renderer, fallbackSurface);
+      SDL_DestroySurface(fallbackSurface);
+
+      if (m_texture) {
+        SDL_SetTextureBlendMode(m_texture, SDL_BLENDMODE_BLEND);
+        return true;
+      }
+    }
+
+    std::cerr << "[Texture2D Error] Failed to load image '" << filePath << "'"
+              << std::endl;
+    return false;
   }
 
   // Creates a solid single-color texture.
@@ -120,6 +184,10 @@ public:
     tex->m_height = height;
     tex->m_texture = SDL_CreateTextureFromSurface(renderer, surface);
     SDL_DestroySurface(surface);
+
+    if (tex->m_texture) {
+      SDL_SetTextureBlendMode(tex->m_texture, SDL_BLENDMODE_BLEND);
+    }
     return tex;
   }
 
@@ -150,6 +218,11 @@ public:
   // Returns dimensions as a Vector2.
   Vector2 getSize() const {
     return Vector2(static_cast<float>(m_width), static_cast<float>(m_height));
+  }
+
+  // Returns full bounding Rect2 of the texture.
+  Rect2 getRect() const {
+    return Rect2(0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height));
   }
 
   // Returns the underlying native SDL_Texture pointer.
