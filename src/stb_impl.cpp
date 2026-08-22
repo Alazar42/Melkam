@@ -6,3 +6,6 @@
 
 #define NANOSVGRAST_IMPLEMENTATION
 #include "helper/nanosvgrast.h"
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "helper/stb_truetype.h"

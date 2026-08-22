@@ -3,6 +3,7 @@
 #include "helper/color/Color.hpp"
 #include "helper/vectors/Vector2.hpp"
 #include "nodes/2D/Camera2D.hpp"
+#include "renderers/Font.hpp"
 #include "renderers/Texture2D.hpp"
 #include "window.hpp"
 #include <SDL3/SDL.h>
@@ -10,19 +11,21 @@
 #include <cmath>
 #include <vector>
 
-// Hardware-accelerated 2D Primitive and Batch Renderer.
+// Hardware-accelerated 2D Primitive, Batch, and Screen-Space UI Renderer.
 class Renderer2D {
 public:
   // Initializes the 2D renderer with an active SDL_Renderer.
   static void init(SDL_Renderer *renderer) {
     s_renderer = renderer;
     Texture2D::setDefaultRenderer(renderer);
+    Font::setDefaultRenderer(renderer);
   }
 
   // Initializes the 2D renderer using a Window instance.
   static void init(Window &window) {
     s_renderer = window.getRenderer();
     Texture2D::setDefaultRenderer(s_renderer);
+    Font::setDefaultRenderer(s_renderer);
   }
 
   // Begins a 2D rendering pass without camera transformation (screen coordinates).
@@ -316,6 +319,71 @@ public:
       SDL_RenderTextureRotated(s_renderer, nativeTex, srcPtr, &dstRect,
                                angleDegrees, &center, flip);
     }
+  }
+
+  // =========================================================================
+  // Canvas / Screen-Space UI Rendering (Independent of 2D/3D Camera View)
+  // =========================================================================
+
+  // Returns underlying SDL_Renderer pointer.
+  static SDL_Renderer *getNativeRenderer() { return s_renderer; }
+
+  // Draws text in screen space using the provided Font or default font.
+  static void drawText(const std::string &text, const Vector2 &screenPos,
+                       const Color &color = Color::WHITE, float fontSize = 16.0f,
+                       const std::shared_ptr<Font> &font = nullptr) {
+    if (!s_renderer || text.empty()) return;
+    const Font &activeFont = font ? *font : *Font::getDefaultFont();
+    activeFont.drawText(s_renderer, text, screenPos, color, fontSize);
+  }
+
+  // Draws a flat rectangle in screen space.
+  static void drawRectScreen(const Vector2 &screenPos, const Vector2 &size,
+                             const Color &color, bool filled = true) {
+    if (!s_renderer) return;
+    setDrawColor(color);
+    SDL_FRect rect{screenPos.x, screenPos.y, size.x, size.y};
+    if (filled) {
+      SDL_RenderFillRect(s_renderer, &rect);
+    } else {
+      SDL_RenderRect(s_renderer, &rect);
+    }
+  }
+
+  // Draws a rounded / bordered rectangle in screen space.
+  static void drawRoundedRectScreen(const Vector2 &screenPos, const Vector2 &size,
+                                    float radius, const Color &fillColor,
+                                    const Color &borderColor = Color(0.0f, 0.0f, 0.0f, 0.0f),
+                                    float borderWidth = 0.0f) {
+    if (!s_renderer) return;
+    (void)radius;
+
+    // Fill rect
+    drawRectScreen(screenPos, size, fillColor, true);
+
+    // Border rect
+    if (borderColor.a > 0.0f && borderWidth > 0.0f) {
+      setDrawColor(borderColor);
+      SDL_FRect rect{screenPos.x, screenPos.y, size.x, size.y};
+      SDL_RenderRect(s_renderer, &rect);
+    }
+  }
+
+  // Draws a texture directly in screen space.
+  static void drawTextureScreen(const Texture2D &texture, const Rect2 &srcRect,
+                                const Vector2 &screenPos, const Vector2 &size,
+                                const Color &tint = Color::WHITE) {
+    if (!s_renderer || !texture.isValid()) return;
+
+    SDL_Texture *nativeTex = texture.getNativeTexture();
+    SDL_SetTextureColorModFloat(nativeTex, tint.r, tint.g, tint.b);
+    SDL_SetTextureAlphaModFloat(nativeTex, tint.a);
+
+    SDL_FRect dstRect{screenPos.x, screenPos.y, size.x, size.y};
+    SDL_FRect sdlSrcRect{srcRect.position.x, srcRect.position.y, srcRect.size.x, srcRect.size.y};
+    const SDL_FRect *srcPtr = (srcRect.hasArea()) ? &sdlSrcRect : nullptr;
+
+    SDL_RenderTexture(s_renderer, nativeTex, srcPtr, &dstRect);
   }
 
 private:

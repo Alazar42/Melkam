@@ -48,9 +48,20 @@
 #include "nodes/2D/physics/Area2D.hpp"
 #include "nodes/2D/physics/RigidBody2D.hpp"
 
-// 2D Graphics & Textures
+// 2D Graphics, Textures & Fonts
 #include "renderers/Renderer2D.hpp"
 #include "renderers/Texture2D.hpp"
+#include "renderers/Font.hpp"
+
+// UI & Control Nodes (Godot-Inspired Canvas UI Layer)
+#include "nodes/UI/Control.hpp"
+#include "nodes/UI/Label.hpp"
+#include "nodes/UI/Button.hpp"
+#include "nodes/UI/ProgressBar.hpp"
+#include "nodes/UI/Panel.hpp"
+#include "nodes/UI/TextureRect.hpp"
+#include "nodes/UI/BoxContainer.hpp"
+#include "nodes/UI/CanvasLayer.hpp"
 
 // ECS 2D Components & Simulation Systems
 #include "components/Components2D.hpp"
