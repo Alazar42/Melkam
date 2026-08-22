@@ -11,10 +11,11 @@ endif()
 
 find_package(EnTT REQUIRED)
 find_package(SDL3 REQUIRED)
+find_package(box2d REQUIRED)
 
 add_executable(MelkamEngine
     src/main.cpp
 )
 
 target_include_directories(MelkamEngine PUBLIC include include/helper)
-target_link_libraries(MelkamEngine PRIVATE EnTT::EnTT SDL3::SDL3)
+target_link_libraries(MelkamEngine PRIVATE EnTT::EnTT SDL3::SDL3 box2d::box2d)

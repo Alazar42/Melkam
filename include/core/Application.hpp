@@ -52,15 +52,22 @@ public:
     }
   }
 
-  // Alias for addNode.
-  void addChild(std::shared_ptr<Node> node) {
-    addNode(std::move(node));
+  // Attaches an existing Node to the scene root.
+  std::shared_ptr<Node> addChild(std::shared_ptr<Node> node) {
+    addNode(node);
+    return node;
   }
 
   // Instantiates a Node and attaches it to the scene root in a single call.
   template <typename T, typename... Args>
+  std::shared_ptr<T> addChild(Args &&...args) {
+    return m_tree->getRoot()->addChild<T>(std::forward<Args>(args)...);
+  }
+
+  // Alias for addChild.
+  template <typename T, typename... Args>
   std::shared_ptr<T> spawn(Args &&...args) {
-    return m_tree->getRoot()->spawnChild<T>(std::forward<Args>(args)...);
+    return addChild<T>(std::forward<Args>(args)...);
   }
 
   // Starts and runs the main engine loop.
@@ -77,6 +84,7 @@ public:
     });
     Renderer2D::init(*m_window);
     Audio::init();
+    PhysicsServer2D::init();
 
     // User initialization
     onInit();
@@ -92,6 +100,7 @@ public:
       // 1. Fixed Timestep Physics Cycle
       while (Time::shouldDoFixedUpdate()) {
         float fixedDt = Time::getFixedDeltaTime();
+        PhysicsServer2D::step(fixedDt);
         m_tree->physicsProcess(fixedDt);
       }
 
@@ -113,6 +122,7 @@ public:
     }
 
     onShutdown();
+    PhysicsServer2D::shutdown();
     Audio::shutdown();
   }
 

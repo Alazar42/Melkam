@@ -161,7 +161,7 @@ public:
 
   // Renders this mesh automatically when part of the active scene tree.
   void onDraw() override {
-    if (!visible) return;
+    if (!isGlobalVisible()) return;
     Transform2D global = getGlobalTransform();
     draw(global.position, global.rotation, global.scale);
   }

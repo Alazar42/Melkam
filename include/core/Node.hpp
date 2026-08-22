@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Signal.hpp"
 #include "helper/vectors/Vector2.hpp"
 #include "input.hpp"
 #include <algorithm>
@@ -16,6 +17,13 @@ public:
   std::string name = "Node";
   bool visible = true;
   bool active = true;
+
+  // Built-in Godot standard signals
+  Signal<> ready;
+  Signal<float> process;
+  Signal<float> physics_process;
+  Signal<Node *> child_entered_tree;
+  Signal<Node *> child_exiting_tree;
 
   Node() = default;
   explicit Node(std::string nodeName) : name(std::move(nodeName)) {}
@@ -35,6 +43,17 @@ public:
     return *this;
   }
 
+  // Checks if this node and all of its ancestors are visible
+  bool isGlobalVisible() const {
+    if (!visible) return false;
+    const Node *curr = m_parent;
+    while (curr) {
+      if (!curr->visible) return false;
+      curr = curr->m_parent;
+    }
+    return true;
+  }
+
   // Returns active window viewport dimensions (defined after Window class)
   Vector2 getViewportSize() const;
   Vector2 getViewportCenter() const;
@@ -47,20 +66,27 @@ public:
   virtual void onDraw() {}
   virtual void onDestroy() {}
 
-  // Attaches a child node to this node.
-  void addChild(std::shared_ptr<Node> child) {
-    if (!child || child.get() == this) return;
+  // Attaches an existing child node to this node.
+  std::shared_ptr<Node> addChild(std::shared_ptr<Node> child) {
+    if (!child || child.get() == this) return nullptr;
     child->m_parent = this;
     m_children.push_back(child);
     child->onReady();
+    return child;
   }
 
   // Instantiates and attaches a child node in a single line.
   template <typename T, typename... Args>
-  std::shared_ptr<T> spawnChild(Args &&...args) {
+  std::shared_ptr<T> addChild(Args &&...args) {
     auto child = std::make_shared<T>(std::forward<Args>(args)...);
-    addChild(child);
+    addChild(std::static_pointer_cast<Node>(child));
     return child;
+  }
+
+  // Backwards-compatibility alias
+  template <typename T, typename... Args>
+  std::shared_ptr<T> spawnChild(Args &&...args) {
+    return addChild<T>(std::forward<Args>(args)...);
   }
 
   // Removes a child node from this node.
