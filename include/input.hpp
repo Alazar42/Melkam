@@ -133,7 +133,87 @@ enum class MouseButton : uint8_t {
   Middle = SDL_BUTTON_MIDDLE,
   Right = SDL_BUTTON_RIGHT,
   X1 = SDL_BUTTON_X1,
-  X2 = SDL_BUTTON_X2
+  X2 = SDL_BUTTON_X2,
+  Unknown = 0
+};
+
+enum class InputEventType : uint8_t {
+  None,
+  Key,
+  MouseButton,
+  MouseMotion,
+  MouseWheel,
+  Window
+};
+
+// Strongly-typed engine InputEvent (wrapping keyboard, mouse, and window events).
+struct InputEvent {
+  InputEventType type = InputEventType::None;
+  Key key = Key::Unknown;
+  bool pressed = false;
+  bool echo = false;
+  MouseButton mouseButton = MouseButton::Unknown;
+  Vector2 mousePosition{0.0f, 0.0f};
+  Vector2 mouseDelta{0.0f, 0.0f};
+  Vector2 mouseScroll{0.0f, 0.0f};
+  bool shift = false;
+  bool ctrl = false;
+  bool alt = false;
+  bool handled = false;
+
+  bool isPressed() const { return pressed; }
+  bool isReleased() const { return !pressed; }
+  bool isEcho() const { return echo; }
+  bool isKey(Key targetKey) const { return type == InputEventType::Key && key == targetKey; }
+  bool isKeyPressed(Key targetKey) const { return isKey(targetKey) && pressed; }
+  bool isKeyReleased(Key targetKey) const { return isKey(targetKey) && !pressed; }
+  bool isMouseButton(MouseButton btn) const { return type == InputEventType::MouseButton && mouseButton == btn; }
+  bool isMouseButtonPressed(MouseButton btn) const { return isMouseButton(btn) && pressed; }
+  bool isMouseMotion() const { return type == InputEventType::MouseMotion; }
+  bool isMouseWheel() const { return type == InputEventType::MouseWheel; }
+  void setHandled() { handled = true; }
+  bool isHandled() const { return handled; }
+
+  // Converts native SDL_Event into an engine InputEvent
+  static InputEvent fromSDL(const SDL_Event &sdlEvent) {
+    InputEvent ev;
+    switch (sdlEvent.type) {
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP:
+      ev.type = InputEventType::Key;
+      ev.key = static_cast<Key>(sdlEvent.key.scancode);
+      ev.pressed = sdlEvent.key.down;
+      ev.echo = sdlEvent.key.repeat;
+      ev.shift = (sdlEvent.key.mod & SDL_KMOD_SHIFT) != 0;
+      ev.ctrl = (sdlEvent.key.mod & SDL_KMOD_CTRL) != 0;
+      ev.alt = (sdlEvent.key.mod & SDL_KMOD_ALT) != 0;
+      break;
+
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+      ev.type = InputEventType::MouseButton;
+      ev.mouseButton = static_cast<MouseButton>(sdlEvent.button.button);
+      ev.pressed = sdlEvent.button.down;
+      ev.mousePosition = Vector2(sdlEvent.button.x, sdlEvent.button.y);
+      break;
+
+    case SDL_EVENT_MOUSE_MOTION:
+      ev.type = InputEventType::MouseMotion;
+      ev.mousePosition = Vector2(sdlEvent.motion.x, sdlEvent.motion.y);
+      ev.mouseDelta = Vector2(sdlEvent.motion.xrel, sdlEvent.motion.yrel);
+      break;
+
+    case SDL_EVENT_MOUSE_WHEEL:
+      ev.type = InputEventType::MouseWheel;
+      ev.mouseScroll = Vector2(sdlEvent.wheel.x, sdlEvent.wheel.y);
+      break;
+
+    default:
+      ev.type = InputEventType::None;
+      break;
+    }
+    return ev;
+  }
 };
 
 // Comprehensive Input manager handling real-time Keyboard and Mouse states on top of SDL3.

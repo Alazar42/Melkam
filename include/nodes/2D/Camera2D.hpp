@@ -1,49 +1,49 @@
 #pragma once
 
 #include "helper/vectors/Vector2.hpp"
+#include "nodes/2D/Node2D.hpp"
 #include <cmath>
+#include <string>
 
-// 2D Camera supporting panning, zooming, rotation, and coordinate conversion.
-class Camera2D {
+// 2D Camera Node (inspired by Godot Camera2D) supporting viewport transforms and coordinate mapping.
+class Camera2D : public Node2D {
 public:
-  Vector2 position{0.0f, 0.0f}; // Camera center position in world coordinates
   Vector2 offset{0.0f, 0.0f};   // Screen offset (typically screen center {w/2, h/2})
   float zoom = 1.0f;            // Zoom scale factor (1.0 = 100%, 2.0 = 200% zoom-in)
-  float rotation = 0.0f;        // Rotation in radians
 
-  Camera2D() = default;
+  Camera2D() : Node2D("Camera2D") {}
 
-  Camera2D(const Vector2 &target, const Vector2 &screenOffset, float zoomLevel = 1.0f,
-           float rotationAngle = 0.0f)
-      : position(target), offset(screenOffset), zoom(zoomLevel),
-        rotation(rotationAngle) {}
+  Camera2D(const Vector2 &targetPos, const Vector2 &screenOffset, float zoomLevel = 1.0f)
+      : Node2D("Camera2D"), offset(screenOffset), zoom(zoomLevel) {
+    transform.position = targetPos;
+  }
+
+  // Returns rotation of camera.
+  float getRotation() const { return transform.rotation; }
 
   // Converts a screen-space pixel coordinate (e.g. mouse position) to world-space coordinates.
   Vector2 screenToWorld(const Vector2 &screenPos) const {
     Vector2 res = screenPos - offset;
-    if (rotation != 0.0f) {
-      res = res.rotated(-rotation);
+    float rot = transform.rotation;
+    if (rot != 0.0f) {
+      res = res.rotated(-rot);
     }
     if (zoom != 0.0f) {
       res = res / zoom;
     }
-    return res + position;
+    return res + getGlobalPosition();
   }
 
   // Converts a world-space coordinate to screen-space pixel coordinates.
   Vector2 worldToScreen(const Vector2 &worldPos) const {
-    Vector2 res = worldPos - position;
+    Vector2 res = worldPos - getGlobalPosition();
     if (zoom != 0.0f) {
       res = res * zoom;
     }
-    if (rotation != 0.0f) {
-      res = res.rotated(rotation);
+    float rot = transform.rotation;
+    if (rot != 0.0f) {
+      res = res.rotated(rot);
     }
     return res + offset;
-  }
-
-  // Applies camera transformation to a local vertex for rendering.
-  Vector2 transform(const Vector2 &worldPos) const {
-    return worldToScreen(worldPos);
   }
 };

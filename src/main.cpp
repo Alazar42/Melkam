@@ -1,72 +1,48 @@
-#include "renderers/Renderer2D.hpp"
-#include "window.hpp"
+#include "MelkamEngine.hpp"
 
-int main() {
-  WindowProps props;
-  props.title = "MelkamEngine - 2D Sandbox";
-  props.width = 1280;
-  props.height = 720;
-  props.maximized = true;
-  props.vsync = true;
-  props.clearColor = Color::from_rgba8(20, 20, 25);
+// 1. Custom Player Node (pure Godot style - visual nodes are children)
+class PlayerNode : public Node2D {
+public:
+  float speed = 400.0f;
 
-  Window window(props);
-  Renderer2D::init(window);
-
-  Vector2 playerPos(640.0f, 360.0f);
-  float playerSpeed = 350.0f;
-  float rotationAngle = 0.0f;
-
-  while (window.isOpen()) {
-    window.pollEvents();
-
-    if (Input::isKeyJustPressed(Key::Escape)) {
-      window.close();
-    }
-
-    // Smooth FPS & Metrics in Title
-    if (Time::getFrameCount() % 30 == 0) {
-      window.setTitle(
-          "MelkamEngine | FPS: " +
-          std::to_string(static_cast<int>(Time::getFPS())) + " | dt: " +
-          std::to_string(Time::getDeltaTimeMs()).substr(0, 4) + "ms");
-    }
-
-    // Movement logic (frame-rate independent)
-    float dt = Time::getDeltaTime();
-    Vector2 moveDir = Input::getVector(Key::A, Key::D, Key::W, Key::S);
-    playerPos += moveDir * playerSpeed * dt;
-
-    rotationAngle += 1.5f * dt;
-
-    // Render Frame
-    window.clear();
-
-    Renderer2D::begin();
-
-    // 1. Draw Player
-    Renderer2D::drawRect(playerPos - Vector2(25.0f, 25.0f), {50.0f, 50.0f},
-                         Color::GOLD);
-
-    // 2. Draw Rotating Square
-    Renderer2D::drawRectRotated({300.0f, 300.0f}, {80.0f, 80.0f}, rotationAngle,
-                                Color::CORAL);
-
-    // 3. Draw Crosshair at Mouse position
-    Vector2 mousePos = Input::getMousePosition();
-    Renderer2D::drawCircle(mousePos, 18.0f, Color::CYAN, false);
-
-    // 4. Draw laser pointer between player and mouse
-    Renderer2D::drawLine(playerPos, mousePos, Color::RED, 2.0f);
-
-    // 5. Draw decorative shapes
-    Renderer2D::drawTriangle({150.0f, 150.0f}, {220.0f, 150.0f},
-                             {185.0f, 220.0f}, Color::AQUAMARINE);
-
-    Renderer2D::end();
-
-    window.present();
+  void onReady() override {
+    // Attach visual mesh as a child node
+    spawnChild<MeshInstance2D>(Vector2(50.0f, 50.0f), Color::GOLD);
   }
 
+  void onProcess(float delta) override {
+    Vector2 dir = Input::getVector(Key::A, Key::D, Key::W, Key::S);
+    translate(dir * speed * delta);
+  }
+};
+
+// 2. Custom Spinner Node
+class SpinnerNode : public Node2D {
+public:
+  void onReady() override {
+    // Attach triangle mesh as a child node
+    auto mesh = spawnChild<MeshInstance2D>();
+    *mesh = MeshInstance2D::createTriangle(
+        {-30.0f, 30.0f}, {30.0f, 30.0f}, {0.0f, -30.0f}, Color::CORAL);
+  }
+
+  void onProcess(float delta) override {
+    rotate(2.0f * delta);
+  }
+};
+
+int main() {
+  // 1. Create Application (with maximized = true)
+  Application app("MelkamEngine - Game Sandbox", 1280, 720, true);
+
+  // 2. Add nodes directly to the Application
+  auto player = app.spawn<PlayerNode>();
+  player->setPosition({640.0f, 360.0f});
+
+  auto spinner = app.spawn<SpinnerNode>();
+  spinner->setPosition({320.0f, 240.0f});
+
+  // 3. Run the Game
+  app.run();
   return 0;
 }

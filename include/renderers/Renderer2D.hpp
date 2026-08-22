@@ -3,6 +3,7 @@
 #include "helper/color/Color.hpp"
 #include "helper/vectors/Vector2.hpp"
 #include "nodes/2D/Camera2D.hpp"
+#include "renderers/Texture2D.hpp"
 #include "window.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -15,11 +16,13 @@ public:
   // Initializes the 2D renderer with an active SDL_Renderer.
   static void init(SDL_Renderer *renderer) {
     s_renderer = renderer;
+    Texture2D::setDefaultRenderer(renderer);
   }
 
   // Initializes the 2D renderer using a Window instance.
   static void init(Window &window) {
     s_renderer = window.getRenderer();
+    Texture2D::setDefaultRenderer(s_renderer);
   }
 
   // Begins a 2D rendering pass without camera transformation (screen coordinates).
@@ -238,6 +241,42 @@ public:
 
     setDrawColor(color);
     SDL_RenderLines(s_renderer, sdlPoints.data(), static_cast<int>(sdlPoints.size()));
+  }
+
+  // Draws a 2D texture with optional tint, rotation, and flipping.
+  static void drawTexture(const Texture2D &texture, const Vector2 &position,
+                          const Vector2 &size, const Color &tint = Color::WHITE,
+                          float rotationRadians = 0.0f, bool flipH = false,
+                          bool flipV = false) {
+    if (!s_renderer || !texture.isValid()) return;
+
+    SDL_Texture *nativeTex = texture.getNativeTexture();
+    SDL_SetTextureColorModFloat(nativeTex, tint.r, tint.g, tint.b);
+    SDL_SetTextureAlphaModFloat(nativeTex, tint.a);
+
+    Vector2 screenPos = toScreen(position);
+    Vector2 screenSize = s_activeCamera ? (size * s_activeCamera->zoom) : size;
+    SDL_FRect dstRect{screenPos.x, screenPos.y, screenSize.x, screenSize.y};
+
+    float totalRot = rotationRadians + (s_activeCamera ? s_activeCamera->getRotation() : 0.0f);
+    float angleDegrees = totalRot * (180.0f / 3.14159265358979323846f);
+
+    SDL_FlipMode flip = SDL_FLIP_NONE;
+    if (flipH && flipV) {
+      flip = static_cast<SDL_FlipMode>(SDL_FLIP_HORIZONTAL | SDL_FLIP_VERTICAL);
+    } else if (flipH) {
+      flip = SDL_FLIP_HORIZONTAL;
+    } else if (flipV) {
+      flip = SDL_FLIP_VERTICAL;
+    }
+
+    if (totalRot == 0.0f && flip == SDL_FLIP_NONE) {
+      SDL_RenderTexture(s_renderer, nativeTex, nullptr, &dstRect);
+    } else {
+      SDL_FPoint center{screenSize.x * 0.5f, screenSize.y * 0.5f};
+      SDL_RenderTextureRotated(s_renderer, nativeTex, nullptr, &dstRect,
+                               angleDegrees, &center, flip);
+    }
   }
 
 private:
