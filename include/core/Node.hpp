@@ -104,6 +104,18 @@ public:
     }
   }
 
+  // Removes all child nodes from this node.
+  void removeAllChildren() {
+    for (auto &child : m_children) {
+      if (child) {
+        child->onDestroy();
+        child->m_parent = nullptr;
+      }
+    }
+    m_children.clear();
+  }
+
+
   // Finds a child node by its name (shallow search).
   std::shared_ptr<Node> findChild(const std::string &childName) const {
     for (const auto &child : m_children) {

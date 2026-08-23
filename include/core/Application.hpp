@@ -5,6 +5,8 @@
 #include "core/BootSplash.hpp"
 #include "core/SceneTree.hpp"
 #include "input.hpp"
+
+
 #include "renderers/Renderer2D.hpp"
 #include "systems/Systems2D.hpp"
 #include "time.hpp"
@@ -139,6 +141,8 @@ public:
       Renderer2D::end();
       m_window->present();
     }
+
+
 
     onShutdown();
     PhysicsServer2D::shutdown();

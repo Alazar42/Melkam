@@ -118,11 +118,24 @@ public:
   }
 
   void onProcess(float delta) override {
+    if (!m_initialized) {
+      m_baseY = transform.position.y;
+      m_initialized = true;
+    }
+
     if (visible) {
+      m_bobTime += delta * 3.5f;
+      transform.position.y = m_baseY + std::sin(m_bobTime) * 8.0f;
       rotate(3.0f * delta);
     }
   }
+
+private:
+  float m_baseY = 0.0f;
+  float m_bobTime = 0.0f;
+  bool m_initialized = false;
 };
+
 
 // =============================================================================
 // 3. MAIN MENU SCENE IMPLEMENTATION
@@ -276,6 +289,8 @@ void GameScene::onReady() {
   // Spawn Point Marker (Marker2D)
   auto spawnMarker = addChild<Marker2D>();
   spawnMarker->setPosition({300.0f, 300.0f});
+
+
 
 
   // Collectible Coins with PointLight2D & Particle Sparkles
@@ -449,6 +464,8 @@ void GameScene::onReady() {
     }
   });
 }
+
+
 
 // =============================================================================
 // 5. UI SIMULATION & COMPREHENSIVE SHOWCASE IMPLEMENTATION

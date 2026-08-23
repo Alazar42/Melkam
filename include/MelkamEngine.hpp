@@ -121,7 +121,18 @@
 
 
 
+// Animation & Tweening System (Godot-Inspired)
+#include "animation/Tween.hpp"
+#include "animation/Animation.hpp"
+#include "animation/AnimationPlayer.hpp"
+
+// 2D TileMap & TileSet System (Godot-Inspired)
+#include "nodes/2D/tilemap/TileSet.hpp"
+#include "nodes/2D/tilemap/TileMapLayer.hpp"
+
 // ECS 2D Components & Simulation Systems
 #include "components/Components2D.hpp"
 #include "systems/Systems2D.hpp"
+
+
 
