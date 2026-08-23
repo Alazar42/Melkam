@@ -23,8 +23,8 @@ class Label : public Control {
 public:
   std::string text;
   std::shared_ptr<Font> font = nullptr;
-  float fontSize = 18.0f;
-  Color fontColor = Color::WHITE;
+  float fontSize = 0.0f; // 0 = inherits from active theme
+  Color fontColor = Color(0.0f, 0.0f, 0.0f, 0.0f); // transparent sentinel = inherits from active theme
   Color shadowColor = Color(0.0f, 0.0f, 0.0f, 0.0f);
   Vector2 shadowOffset{1.0f, 1.0f};
 
@@ -35,7 +35,7 @@ public:
     mouseFilter = MouseFilter::Ignore;
   }
 
-  explicit Label(std::string labelText, float size = 18.0f, const Color &color = Color::WHITE)
+  explicit Label(std::string labelText, float size = 0.0f, const Color &color = Color(0, 0, 0, 0))
       : Control("Label"), text(std::move(labelText)), fontSize(size), fontColor(color) {
     mouseFilter = MouseFilter::Ignore;
   }
@@ -44,8 +44,20 @@ public:
     if (text.empty()) return;
 
     Rect2 rect = getGlobalRect();
-    const Font &activeFont = font ? *font : *Font::getDefaultFont();
-    Vector2 textSize = activeFont.getStringSize(text, fontSize);
+    std::shared_ptr<Font> activeFont = font ? font : getThemeFont("font", "Label");
+    const Font &f = activeFont ? *activeFont : *Font::getDefaultFont();
+
+    float activeSize = (fontSize > 0.0f)
+                           ? fontSize
+                           : static_cast<float>(getThemeFontSize("font_size", "Label", 18));
+    Color activeColor = (fontColor.a > 0.0f)
+                            ? fontColor
+                            : getThemeColor("font_color", "Label", Color::WHITE);
+    Color activeShadow = (shadowColor.a > 0.0f)
+                             ? shadowColor
+                             : getThemeColor("shadow_color", "Label", Color(0.0f, 0.0f, 0.0f, 0.0f));
+
+    Vector2 textSize = f.getStringSize(text, activeSize);
 
     // Compute text position based on alignments
     float drawX = rect.position.x;
@@ -63,12 +75,12 @@ public:
     }
 
     // Optional text shadow
-    if (shadowColor.a > 0.0f) {
+    if (activeShadow.a > 0.0f) {
       Renderer2D::drawText(text, Vector2(drawX + shadowOffset.x, drawY + shadowOffset.y),
-                           shadowColor, fontSize, font);
+                           activeShadow, activeSize, activeFont);
     }
 
     // Text foreground
-    Renderer2D::drawText(text, Vector2(drawX, drawY), fontColor * modulate, fontSize, font);
+    Renderer2D::drawText(text, Vector2(drawX, drawY), activeColor * modulate, activeSize, activeFont);
   }
 };

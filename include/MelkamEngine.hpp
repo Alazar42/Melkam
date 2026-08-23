@@ -54,13 +54,25 @@
 #include "renderers/Font.hpp"
 
 // UI & Control Nodes (Godot-Inspired Canvas UI Layer)
+#include "nodes/UI/Theme.hpp"
 #include "nodes/UI/Control.hpp"
+#include "nodes/UI/Range.hpp"
 #include "nodes/UI/Label.hpp"
+#include "nodes/UI/CheckBox.hpp"
 #include "nodes/UI/Button.hpp"
+#include "nodes/UI/TextureButton.hpp"
+#include "nodes/UI/OptionButton.hpp"
+#include "nodes/UI/LineEdit.hpp"
 #include "nodes/UI/ProgressBar.hpp"
+#include "nodes/UI/Slider.hpp"
 #include "nodes/UI/Panel.hpp"
 #include "nodes/UI/TextureRect.hpp"
+#include "nodes/UI/NinePatchRect.hpp"
+#include "nodes/UI/ReferenceRect.hpp"
 #include "nodes/UI/BoxContainer.hpp"
+#include "nodes/UI/GridContainer.hpp"
+#include "nodes/UI/CenterContainer.hpp"
+#include "nodes/UI/ScrollContainer.hpp"
 #include "nodes/UI/CanvasLayer.hpp"
 
 // ECS 2D Components & Simulation Systems

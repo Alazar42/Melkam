@@ -386,6 +386,22 @@ public:
     SDL_RenderTexture(s_renderer, nativeTex, srcPtr, &dstRect);
   }
 
+  static void drawTextureScreen(const Texture2D &texture, const Vector2 &screenPos,
+                                const Vector2 &size, const Color &tint = Color::WHITE) {
+    drawTextureScreen(texture, Rect2(), screenPos, size, tint);
+  }
+
+  static void drawTextureScreen(const Texture2D *texture, const Vector2 &screenPos,
+                                const Vector2 &size, const Color &tint = Color::WHITE) {
+    if (texture) drawTextureScreen(*texture, Rect2(), screenPos, size, tint);
+  }
+
+  static void drawTextureRegionScreen(const Texture2D *texture, const Rect2 &srcRect,
+                                      const Vector2 &screenPos, const Vector2 &size,
+                                      const Color &tint = Color::WHITE) {
+    if (texture) drawTextureScreen(*texture, srcRect, screenPos, size, tint);
+  }
+
 private:
   // Converts world position to active screen coordinate.
   static Vector2 toScreen(const Vector2 &worldPos) {

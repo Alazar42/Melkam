@@ -1,6 +1,7 @@
 #pragma once
 
 #include "helper/color/Color.hpp"
+#include "helper/stb_rect_pack.h"
 #include "helper/stb_truetype.h"
 #include "helper/vectors/Vector2.hpp"
 #include <SDL3/SDL.h>
@@ -13,14 +14,14 @@
 #include <string>
 #include <vector>
 
-// Font Resource representing loaded TrueType / OpenType font or built-in crisp fallback font.
+// High-Fidelity Subpixel Antialiased Font Resource (powered by stb_truetype & oversampled packing).
 class Font {
 public:
   Font() {
     createDefaultBitmapFont();
   }
 
-  explicit Font(const std::string &filePath, float fontSize = 36.0f,
+  explicit Font(const std::string &filePath, float fontSize = 18.0f,
                 SDL_Renderer *renderer = nullptr) {
     if (!loadFromFile(filePath, fontSize, renderer)) {
       createDefaultBitmapFont();
@@ -38,9 +39,9 @@ public:
   // Move-constructible
   Font(Font &&other) noexcept
       : m_texture(other.m_texture), m_atlasWidth(other.m_atlasWidth),
-        m_atlasHeight(other.m_atlasHeight), m_fontSize(other.m_fontSize),
-        m_isTTF(other.m_isTTF), m_path(std::move(other.m_path)) {
-    std::copy(std::begin(other.m_cdata), std::end(other.m_cdata), std::begin(m_cdata));
+        m_atlasHeight(other.m_atlasHeight), m_baseFontSize(other.m_baseFontSize),
+        m_isTTF(other.m_isTTF), m_path(std::move(other.m_path)),
+        m_ranges(std::move(other.m_ranges)) {
     other.m_texture = nullptr;
     other.m_isTTF = false;
   }
@@ -52,10 +53,10 @@ public:
       m_texture = other.m_texture;
       m_atlasWidth = other.m_atlasWidth;
       m_atlasHeight = other.m_atlasHeight;
-      m_fontSize = other.m_fontSize;
+      m_baseFontSize = other.m_baseFontSize;
       m_isTTF = other.m_isTTF;
       m_path = std::move(other.m_path);
-      std::copy(std::begin(other.m_cdata), std::end(other.m_cdata), std::begin(m_cdata));
+      m_ranges = std::move(other.m_ranges);
 
       other.m_texture = nullptr;
       other.m_isTTF = false;
@@ -65,38 +66,54 @@ public:
 
   // Resolves file path across common directory layouts
   static std::string resolvePath(const std::string &path) {
-    if (std::filesystem::exists(path)) return path;
-    if (std::filesystem::exists("../" + path)) return "../" + path;
-    if (std::filesystem::exists("../../" + path)) return "../../" + path;
-    return path;
+    std::string cleanPath = path;
+    if (cleanPath.rfind("res://", 0) == 0) {
+      cleanPath = cleanPath.substr(6);
+    }
+    if (std::filesystem::exists(cleanPath)) return cleanPath;
+    if (std::filesystem::exists("../" + cleanPath)) return "../" + cleanPath;
+    if (std::filesystem::exists("../../" + cleanPath)) return "../../" + cleanPath;
+    if (std::filesystem::exists("../../../" + cleanPath)) return "../../../" + cleanPath;
+    return cleanPath;
   }
 
-  // Returns list of standard system default font candidates for the current OS
+  // Returns list of standard system and project font candidates
   static std::vector<std::string> getSystemFontCandidates() {
     return {
-      // Windows standard fonts
+      // 1. Project Asset Fonts (User Preferred Default)
+      "assets/fonts/Roboto/static/Roboto-Medium.ttf",
+      "assets/fonts/Roboto/static/Roboto-Regular.ttf",
+      "assets/fonts/Roboto/static/Roboto-SemiBold.ttf",
+      "assets/fonts/Inter/static/Inter_18pt-Medium.ttf",
+      "assets/fonts/Inter/static/Inter_18pt-SemiBold.ttf",
+      "assets/fonts/Inter/static/Inter_18pt-Regular.ttf",
+      "assets/fonts/MedievalSharp/MedievalSharp-Regular.ttf",
+      "assets/fonts/Basic/Basic-Regular.ttf",
+      "assets/fonts/basics/Basic-Regular.ttf",
+      "assets/fonts/basics/basic-regular.ttf",
+      // 2. Windows standard fonts
       "C:/Windows/Fonts/segoeui.ttf",
       "C:/Windows/Fonts/arial.ttf",
       "C:/Windows/Fonts/calibri.ttf",
       "C:/Windows/Fonts/tahoma.ttf",
-      // Linux standard fonts
+      // 3. Linux standard fonts
       "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
       "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
       "/usr/share/fonts/TTF/DejaVuSans.ttf",
       "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-      // macOS standard fonts
+      // 4. macOS standard fonts
       "/System/Library/Fonts/SFNS.ttf",
       "/Library/Fonts/Arial.ttf",
       "/System/Library/Fonts/Helvetica.ttc"
     };
   }
 
-  // Loads a TrueType (.ttf) or OpenType (.otf) font from file.
-  bool loadFromFile(const std::string &filePath, float fontSize = 36.0f,
+  // Loads and packs a TrueType font with multi-size 2x2 subpixel oversampling
+  bool loadFromFile(const std::string &filePath, float defaultSize = 18.0f,
                     SDL_Renderer *renderer = nullptr) {
     destroy();
     m_path = filePath;
-    m_fontSize = fontSize;
+    m_baseFontSize = defaultSize;
 
     if (!renderer) renderer = s_defaultRenderer;
     if (!renderer) return false;
@@ -118,18 +135,40 @@ public:
     m_atlasHeight = 1024;
     std::vector<unsigned char> tempBitmap(m_atlasWidth * m_atlasHeight, 0);
 
-    int res = stbtt_BakeFontBitmap(ttfBuffer.data(), 0, fontSize,
-                                   tempBitmap.data(), m_atlasWidth, m_atlasHeight,
-                                   32, 96, m_cdata); // ASCII 32..126
-    if (res <= 0) {
+    // Multi-size resolution packing: 14, 16, 18, 20, 24, 32, 48
+    std::vector<float> targetSizes = {14.0f, 16.0f, 18.0f, 20.0f, 24.0f, 32.0f, 48.0f};
+    m_ranges.resize(targetSizes.size());
+
+    stbtt_pack_context spc;
+    if (!stbtt_PackBegin(&spc, tempBitmap.data(), m_atlasWidth, m_atlasHeight, 0, 1, nullptr)) {
       return false;
     }
 
-    // Convert 8-bit alpha mask to 32-bit RGBA texture
+    // 2x2 Subpixel Oversampling for razor-sharp antialiasing
+    stbtt_PackSetOversampling(&spc, 2, 2);
+
+    for (size_t i = 0; i < targetSizes.size(); ++i) {
+      m_ranges[i].fontSize = targetSizes[i];
+      if (!stbtt_PackFontRange(&spc, ttfBuffer.data(), 0, targetSizes[i], 32, 96,
+                               m_ranges[i].charData)) {
+        stbtt_PackEnd(&spc);
+        return false;
+      }
+    }
+    stbtt_PackEnd(&spc);
+
+    // Convert 8-bit alpha mask to 32-bit RGBA texture with perceptual gamma contrast
     std::vector<uint32_t> rgbaPixels(m_atlasWidth * m_atlasHeight);
     for (size_t i = 0; i < tempBitmap.size(); ++i) {
-      uint8_t alpha = tempBitmap[i];
-      rgbaPixels[i] = (static_cast<uint32_t>(alpha) << 24) | 0x00FFFFFF;
+      uint8_t rawAlpha = tempBitmap[i];
+      if (rawAlpha > 0) {
+        float a = rawAlpha / 255.0f;
+        a = std::pow(a, 0.85f);
+        uint8_t alpha = static_cast<uint8_t>(std::clamp(a * 255.0f + 6.0f, 0.0f, 255.0f));
+        rgbaPixels[i] = (static_cast<uint32_t>(alpha) << 24) | 0x00FFFFFF;
+      } else {
+        rgbaPixels[i] = 0x00000000;
+      }
     }
 
     SDL_Surface *surface = SDL_CreateSurfaceFrom(
@@ -149,79 +188,81 @@ public:
     return false;
   }
 
-  // Returns single-line text dimensions in pixels.
+  // Returns single-line text dimensions in screen pixels.
   Vector2 getStringSize(const std::string &text, float customFontSize = 0.0f) const {
     if (text.empty()) return {0.0f, 0.0f};
 
-    float scale = (customFontSize > 0.0f && m_fontSize > 0.0f)
-                      ? (customFontSize / m_fontSize)
-                      : 1.0f;
+    float reqSize = (customFontSize > 0.0f) ? customFontSize : m_baseFontSize;
 
-    if (!m_isTTF) {
-      return {static_cast<float>(text.length()) * 8.0f * scale, 16.0f * scale};
+    if (!m_isTTF || m_ranges.empty()) {
+      return {static_cast<float>(text.length()) * 8.0f * (reqSize / 16.0f), reqSize};
     }
 
-    float totalAdvance = 0.0f;
+    const SizeRange &range = getClosestRange(reqSize);
+    float scale = reqSize / range.fontSize;
+
+    float curX = 0.0f;
+    float curY = 0.0f;
+
     for (char c : text) {
       if (c >= 32 && c < 128) {
         stbtt_aligned_quad q;
-        float tempX = 0.0f, tempY = 0.0f;
-        stbtt_GetBakedQuad(m_cdata, m_atlasWidth, m_atlasHeight,
-                           c - 32, &tempX, &tempY, &q, 1);
-        totalAdvance += tempX * scale;
+        stbtt_GetPackedQuad(range.charData, m_atlasWidth, m_atlasHeight, c - 32,
+                            &curX, &curY, &q, 0);
       } else if (c == ' ') {
-        totalAdvance += (m_fontSize * 0.28f * scale);
+        curX += (range.fontSize * 0.28f);
       }
     }
 
-    float textHeight = (customFontSize > 0.0f) ? customFontSize : m_fontSize;
-    return {totalAdvance, textHeight};
+    return {curX * scale, reqSize};
   }
 
-  // Renders text string to the screen with linear subpixel scaling.
+  // Renders text string to screen with subpixel oversampled precision.
   void drawText(SDL_Renderer *renderer, const std::string &text,
                 const Vector2 &position, const Color &color,
                 float customFontSize = 0.0f) const {
     if (!renderer || text.empty()) return;
 
-    float targetSize = (customFontSize > 0.0f) ? customFontSize : m_fontSize;
-    float scale = (m_fontSize > 0.0f) ? (targetSize / m_fontSize) : 1.0f;
+    float reqSize = (customFontSize > 0.0f) ? customFontSize : m_baseFontSize;
 
-    if (m_isTTF && m_texture) {
+    if (m_isTTF && m_texture && !m_ranges.empty()) {
+      const SizeRange &range = getClosestRange(reqSize);
+      float scale = reqSize / range.fontSize;
+
       SDL_SetTextureColorModFloat(m_texture, color.r, color.g, color.b);
       SDL_SetTextureAlphaModFloat(m_texture, color.a);
 
       float curX = position.x;
-      float curY = position.y + (m_fontSize * scale * 0.78f); // baseline
+      float curY = position.y + (reqSize * 0.82f); // baseline
 
       for (char c : text) {
         if (c >= 32 && c < 128) {
           stbtt_aligned_quad q;
-          float tempX = 0.0f, tempY = 0.0f;
-          stbtt_GetBakedQuad(m_cdata, m_atlasWidth, m_atlasHeight,
-                             c - 32, &tempX, &tempY, &q, 1);
+          float prevX = curX, prevY = curY;
+          stbtt_GetPackedQuad(range.charData, m_atlasWidth, m_atlasHeight, c - 32,
+                              &curX, &curY, &q, 0);
 
-          float drawX = curX + q.x0 * scale;
-          float drawY = curY + q.y0 * scale;
           float quadW = (q.x1 - q.x0) * scale;
           float quadH = (q.y1 - q.y0) * scale;
+          float drawX = prevX + (q.x0 - prevX) * scale;
+          float drawY = prevY + (q.y0 - prevY) * scale;
 
           SDL_FRect srcRect{q.s0 * m_atlasWidth, q.t0 * m_atlasHeight,
                             (q.s1 - q.s0) * m_atlasWidth, (q.t1 - q.t0) * m_atlasHeight};
           SDL_FRect dstRect{drawX, drawY, quadW, quadH};
 
           SDL_RenderTexture(renderer, m_texture, &srcRect, &dstRect);
-          curX += tempX * scale;
+          curX = prevX + (curX - prevX) * scale;
         } else if (c == ' ') {
-          curX += (m_fontSize * 0.28f * scale);
+          curX += (reqSize * 0.28f);
         }
       }
     } else {
-      drawFallbackBitmapText(renderer, text, position, color, scale);
+      drawFallbackBitmapText(renderer, text, position, color, reqSize / 16.0f);
     }
   }
 
-  // Global default font: loads platform system TrueType font (e.g. Segoe UI / Arial) or fallback
+  // Global default font: loads platform system or asset TrueType font
   static std::shared_ptr<Font> getDefaultFont() {
     if (!s_defaultFont) {
       s_defaultFont = std::make_shared<Font>();
@@ -232,13 +273,15 @@ public:
     return s_defaultFont;
   }
 
-  // Attempts to load standard platform default TrueType font onto a Font instance
+  // Attempts to load standard platform or project asset default TrueType font onto a Font instance
   static bool loadPlatformSystemFont(Font *font) {
     if (!font || !s_defaultRenderer) return false;
 
     for (const auto &cand : getSystemFontCandidates()) {
-      if (std::filesystem::exists(cand)) {
-        if (font->loadFromFile(cand, 36.0f, s_defaultRenderer)) {
+      std::string actualPath = resolvePath(cand);
+      if (std::filesystem::exists(actualPath)) {
+        if (font->loadFromFile(actualPath, 18.0f, s_defaultRenderer)) {
+          std::cout << "[MelkamEngine] Subpixel Font Engine Loaded: " << actualPath << std::endl;
           return true;
         }
       }
@@ -248,7 +291,7 @@ public:
 
   static void setDefaultRenderer(SDL_Renderer *renderer) {
     s_defaultRenderer = renderer;
-    if (s_defaultFont && !s_defaultFont->isTTF()) {
+    if (s_defaultFont) {
       loadPlatformSystemFont(s_defaultFont.get());
     }
   }
@@ -258,15 +301,38 @@ public:
       SDL_DestroyTexture(m_texture);
       m_texture = nullptr;
     }
+    m_ranges.clear();
     m_isTTF = false;
   }
 
   bool isTTF() const { return m_isTTF; }
-  float getBaseFontSize() const { return m_fontSize; }
+  float getBaseFontSize() const { return m_baseFontSize; }
 
 private:
+  struct SizeRange {
+    float fontSize = 18.0f;
+    stbtt_packedchar charData[96]{};
+  };
+
+  const SizeRange &getClosestRange(float targetSize) const {
+    if (m_ranges.empty()) {
+      static SizeRange dummy;
+      return dummy;
+    }
+    size_t bestIdx = 0;
+    float bestDiff = std::abs(m_ranges[0].fontSize - targetSize);
+    for (size_t i = 1; i < m_ranges.size(); ++i) {
+      float diff = std::abs(m_ranges[i].fontSize - targetSize);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestIdx = i;
+      }
+    }
+    return m_ranges[bestIdx];
+  }
+
   void createDefaultBitmapFont() {
-    m_fontSize = 16.0f;
+    m_baseFontSize = 16.0f;
     m_isTTF = false;
   }
 
@@ -401,10 +467,10 @@ private:
   SDL_Texture *m_texture = nullptr;
   int m_atlasWidth = 0;
   int m_atlasHeight = 0;
-  float m_fontSize = 36.0f;
+  float m_baseFontSize = 18.0f;
   bool m_isTTF = false;
   std::string m_path;
-  stbtt_bakedchar m_cdata[96]{};
+  std::vector<SizeRange> m_ranges;
 
   inline static std::shared_ptr<Font> s_defaultFont = nullptr;
   inline static SDL_Renderer *s_defaultRenderer = nullptr;

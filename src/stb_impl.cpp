@@ -7,5 +7,8 @@
 #define NANOSVGRAST_IMPLEMENTATION
 #include "helper/nanosvgrast.h"
 
+#define STB_RECT_PACK_IMPLEMENTATION
+#include "helper/stb_rect_pack.h"
+
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "helper/stb_truetype.h"

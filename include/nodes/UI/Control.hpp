@@ -7,9 +7,11 @@
 #include "helper/vectors/Vector2.hpp"
 #include "input.hpp"
 #include "renderers/Renderer2D.hpp"
+#include "nodes/UI/Theme.hpp"
 #include "window.hpp"
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -68,12 +70,56 @@ public:
   float rotation = 0.0f;
   Color modulate = Color::WHITE;
 
-  // Input & Focus
+  // Input, Focus & Theming
   MouseFilter mouseFilter = MouseFilter::Stop;
   bool clipContents = false;
+  std::shared_ptr<Theme> theme = nullptr;
 
   Control() : Node("Control") {}
   explicit Control(std::string nodeName) : Node(std::move(nodeName)) {}
+
+  // Resolves active theme (searches local theme, parent tree, or global default theme)
+  std::shared_ptr<Theme> getTheme() const {
+    if (theme) return theme;
+    Node *curr = getParent();
+    while (curr) {
+      auto *ctrl = dynamic_cast<Control *>(curr);
+      if (ctrl && ctrl->theme) return ctrl->theme;
+      curr = curr->getParent();
+    }
+    return Theme::getDefaultTheme();
+  }
+
+  Color getThemeColor(const std::string &name, const std::string &nodeType = "",
+                      const Color &fallback = Color::WHITE) const {
+    auto activeTheme = getTheme();
+    return activeTheme ? activeTheme->getColor(name, nodeType.empty() ? name : nodeType, fallback)
+                       : fallback;
+  }
+
+  std::shared_ptr<Font> getThemeFont(const std::string &name = "font",
+                                     const std::string &nodeType = "") const {
+    auto activeTheme = getTheme();
+    return activeTheme ? activeTheme->getFont(name, nodeType) : Font::getDefaultFont();
+  }
+
+  int getThemeFontSize(const std::string &name = "font_size", const std::string &nodeType = "",
+                       int fallback = 16) const {
+    auto activeTheme = getTheme();
+    return activeTheme ? activeTheme->getFontSize(name, nodeType, fallback) : fallback;
+  }
+
+  int getThemeConstant(const std::string &name, const std::string &nodeType = "",
+                       int fallback = 0) const {
+    auto activeTheme = getTheme();
+    return activeTheme ? activeTheme->getConstant(name, nodeType, fallback) : fallback;
+  }
+
+  std::shared_ptr<Texture2D> getThemeTexture(const std::string &name = "texture",
+                                             const std::string &nodeType = "") const {
+    auto activeTheme = getTheme();
+    return activeTheme ? activeTheme->getTexture(name, nodeType) : nullptr;
+  }
 
   // Sets anchors to a Godot Layout Preset
   void setAnchorsPreset(LayoutPreset preset, bool keepOffsets = false) {
@@ -244,6 +290,48 @@ public:
   // Subclasses override drawControl to perform screen-space drawing
   virtual void drawControl() {}
 
+  // =========================================================================
+  // Top-Level Overlay & Modal Popup Management (Godot PopupMenu / Floating Layer)
+  // =========================================================================
+  struct OverlayItem {
+    void *owner = nullptr;
+    std::function<void()> drawCallback;
+    std::function<bool(const InputEvent &)> inputCallback;
+  };
+
+  static void setModalOverlay(void *owner, std::function<void()> drawCallback,
+                              std::function<bool(const InputEvent &)> inputCallback) {
+    removeModalOverlay(owner);
+    s_overlays.push_back({owner, std::move(drawCallback), std::move(inputCallback)});
+  }
+
+  static void removeModalOverlay(void *owner) {
+    s_overlays.erase(
+        std::remove_if(s_overlays.begin(), s_overlays.end(),
+                       [owner](const OverlayItem &item) { return item.owner == owner; }),
+        s_overlays.end());
+  }
+
+  static bool hasActiveOverlay() {
+    return !s_overlays.empty();
+  }
+
+  static bool processOverlayInput(const InputEvent &event) {
+    for (auto it = s_overlays.rbegin(); it != s_overlays.rend(); ++it) {
+      if (it->inputCallback && it->inputCallback(event)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static void renderOverlays() {
+    for (auto &item : s_overlays) {
+      if (item.drawCallback) item.drawCallback();
+    }
+  }
+
 protected:
   bool m_isHovered = false;
+  inline static std::vector<OverlayItem> s_overlays;
 };

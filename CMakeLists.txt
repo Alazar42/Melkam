@@ -20,3 +20,11 @@ add_executable(MelkamEngine
 
 target_include_directories(MelkamEngine PUBLIC include include/helper)
 target_link_libraries(MelkamEngine PRIVATE EnTT::EnTT SDL3::SDL3 box2d::box2d)
+
+# Automatically bundle / copy project assets with the executable output
+add_custom_command(TARGET MelkamEngine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:MelkamEngine>/assets
+)
+

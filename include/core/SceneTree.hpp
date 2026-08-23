@@ -2,6 +2,7 @@
 
 #include "core/Node.hpp"
 #include "input.hpp"
+#include "nodes/UI/Control.hpp"
 #include <memory>
 
 // Scene Tree manager (inspired by Godot's SceneTree) orchestrating scenes and dispatching frame cycles.
@@ -40,15 +41,22 @@ public:
     }
   }
 
-  // Draws all visible nodes in the tree.
+  // Draws all visible nodes in the tree and deferred top-level UI popups/overlays.
   void draw() {
     if (m_root) {
       m_root->drawTree();
+      Control::renderOverlays();
     }
   }
 
-  // Dispatches an engine input event through the scene tree.
+  // Dispatches an engine input event through top-level overlays then the scene tree.
   void input(const InputEvent &event) {
+    if (Control::hasActiveOverlay()) {
+      if (Control::processOverlayInput(event)) {
+        const_cast<InputEvent &>(event).setHandled();
+        return;
+      }
+    }
     if (m_root) {
       m_root->inputTree(event);
     }
