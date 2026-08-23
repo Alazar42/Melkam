@@ -28,14 +28,24 @@ public:
     Font::setDefaultRenderer(s_renderer);
   }
 
-  // Begins a 2D rendering pass without camera transformation (screen coordinates).
+  // Begins a 2D rendering pass (uses active current Camera2D if set, or screen coordinates if none).
   static void begin() {
+    s_activeCamera = Camera2D::getCurrent();
+  }
+
+  // Begins a 2D rendering pass with explicit world-to-screen Camera2D transformation.
+  static void begin(const Camera2D &camera) {
+    s_activeCamera = &camera;
+  }
+
+  // Begins a 2D rendering pass explicitly in screen space without camera transform.
+  static void beginScreen() {
     s_activeCamera = nullptr;
   }
 
-  // Begins a 2D rendering pass with world-to-screen Camera2D transformation.
-  static void begin(const Camera2D &camera) {
-    s_activeCamera = &camera;
+  // Sets or overrides the active Camera2D for the current rendering pass.
+  static void setCamera(const Camera2D *camera) {
+    s_activeCamera = camera;
   }
 
   // Ends the current 2D rendering pass.

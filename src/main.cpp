@@ -1,21 +1,25 @@
 #include "MelkamEngine.hpp"
 
-// 1. Controllable Player Character (CharacterBody2D with CollisionShape2D &
-// Cute Smiley Sprite)
+// 1. Controllable Player Character (CharacterBody2D with CollisionShape2D,
+// Cute Smiley Sprite & Camera2D)
 class PlayerNode : public CharacterBody2D {
 public:
   float speed = 350.0f;
   float jumpVelocity = -750.0f;
   float gravity = 1400.0f;
+  std::shared_ptr<Camera2D> camera = nullptr;
 
   void onReady() override {
     // 1. Attach CollisionShape2D child using addChild
     auto colShape = addChild<CollisionShape2D>(Vector2(48.0f, 48.0f));
 
     // 2. Attach Cute Smiley Box Sprite2D
-    auto sprite =
-        colShape->addChild<Sprite2D>("assets/sprites/player_smiley.png");
+    auto sprite = addChild<Sprite2D>("assets/sprites/player_smiley.png");
     sprite->size = {48.0f, 48.0f};
+
+    // 3. Attach Camera2D child and make it current to follow player
+    camera = addChild<Camera2D>();
+    camera->makeCurrent();
   }
 
   void onPhysicsProcess(float delta) override {
@@ -81,10 +85,10 @@ public:
 
         if (g_coinLabel) {
           g_coinLabel->text =
-              "Coins Collected: " + std::to_string(g_coinsCollected) + " / 2";
+              "Coins Collected: " + std::to_string(g_coinsCollected) + " / 3";
         }
         if (g_progressBar) {
-          g_progressBar->setValue(g_coinsCollected * 50.0f);
+          g_progressBar->setValue(g_coinsCollected * (100.0f / 3.0f));
         }
 
         visible = false;    // Coin collected!
@@ -110,25 +114,32 @@ int main() {
   auto ground = app.addChild<StaticBody2D>("Ground");
   ground->setPosition({640.0f, 680.0f});
   auto groundShape =
-      ground->addChild<CollisionShape2D>(Vector2(1280.0f, 50.0f));
+      ground->addChild<CollisionShape2D>(Vector2(2560.0f, 50.0f));
   auto groundSprite =
       groundShape->addChild<Sprite2D>("assets/sprites/grass_platform.png");
-  groundSprite->size = {1280.0f, 50.0f};
+  groundSprite->size = {2560.0f, 50.0f};
 
   // Floating Grass Platforms
   auto plat1 = app.addChild<StaticBody2D>("Platform1");
   plat1->setPosition({350.0f, 500.0f});
   auto plat1Shape = plat1->addChild<CollisionShape2D>(Vector2(260.0f, 40.0f));
   auto plat1Sprite =
-      plat1Shape->addChild<Sprite2D>("assets/sprites/grass_platform.png");
+      plat1->addChild<Sprite2D>("assets/sprites/grass_platform.png");
   plat1Sprite->size = {260.0f, 40.0f};
 
   auto plat2 = app.addChild<StaticBody2D>("Platform2");
   plat2->setPosition({850.0f, 380.0f});
   auto plat2Shape = plat2->addChild<CollisionShape2D>(Vector2(260.0f, 40.0f));
   auto plat2Sprite =
-      plat2Shape->addChild<Sprite2D>("assets/sprites/grass_platform.png");
+      plat2->addChild<Sprite2D>("assets/sprites/grass_platform.png");
   plat2Sprite->size = {260.0f, 40.0f};
+
+  auto plat3 = app.addChild<StaticBody2D>("Platform3");
+  plat3->setPosition({1400.0f, 480.0f});
+  auto plat3Shape = plat3->addChild<CollisionShape2D>(Vector2(260.0f, 40.0f));
+  auto plat3Sprite =
+      plat3->addChild<Sprite2D>("assets/sprites/grass_platform.png");
+  plat3Sprite->size = {260.0f, 40.0f};
 
   // 3. Collectible Coins (Area2D with Signal connection)
   auto coin1 = app.addChild<CoinNode>();
@@ -136,6 +147,9 @@ int main() {
 
   auto coin2 = app.addChild<CoinNode>();
   coin2->setPosition({850.0f, 320.0f});
+
+  auto coin3 = app.addChild<CoinNode>();
+  coin3->setPosition({1400.0f, 420.0f});
 
   // 4. Dynamic Crates (RigidBody2D with Godot defaults: friction 1.0, bounce
   // 0.0)
@@ -201,7 +215,7 @@ int main() {
   coinIcon->setSize({24.0f, 24.0f});
 
   g_coinLabel = hudPanel->addChild<Label>(
-      "Coins Collected: 0 / 2"); // Inherits cyan text from hudTheme
+      "Coins Collected: 0 / 3"); // Inherits cyan text from hudTheme
   g_coinLabel->setPosition({52.0f, 48.0f});
 
   g_progressBar =
@@ -215,7 +229,7 @@ int main() {
   // theme)
   auto controlsPanel = app.addChild<Panel>();
   controlsPanel->setPosition({924.0f, 24.0f});
-  controlsPanel->setSize({332.0f, 220.0f});
+  controlsPanel->setSize({332.0f, 280.0f});
   controlsPanel->texture = panelTex;
   controlsPanel->patchMarginLeft = 20.0f;
   controlsPanel->patchMarginTop = 20.0f;
@@ -245,9 +259,9 @@ int main() {
 
   // 2. Jump Power Selector (OptionButton)
   auto jumpOption = controlsPanel->addChild<OptionButton>();
-  jumpOption->setPosition({20.0f, 100.0f});
-  jumpOption->setSize({290.0f, 36.0f});
-  jumpOption->fontSize = 17.0f;
+  jumpOption->setPosition({20.0f, 96.0f});
+  jumpOption->setSize({290.0f, 32.0f});
+  jumpOption->fontSize = 16.0f;
   jumpOption->addItem("Normal Jump (-750)");
   jumpOption->addItem("Super Jump (-950)");
   jumpOption->addItem("Mega Jump (-1150)");
@@ -264,13 +278,33 @@ int main() {
               << player->jumpVelocity << " ===" << std::endl;
   });
 
-  // 3. Jump Push Button with Icon & Textured Skin (Button)
+  // 3. Camera Zoom Slider (HSlider)
+  auto zoomLabel = controlsPanel->addChild<Label>("Camera Zoom: 1.0x", 16.0f);
+  zoomLabel->setPosition({20.0f, 136.0f});
+
+  auto zoomSlider = controlsPanel->addChild<HSlider>();
+  zoomSlider->setPosition({20.0f, 160.0f});
+  zoomSlider->setSize({290.0f, 20.0f});
+  zoomSlider->setMinValue(0.5f);
+  zoomSlider->setMaxValue(2.0f);
+  zoomSlider->setValue(1.0f);
+  zoomSlider->value_changed.connect([player, zoomLabel](float newZoom) {
+    if (player && player->camera)
+      player->camera->setZoom(newZoom);
+    if (zoomLabel) {
+      char buf[32];
+      snprintf(buf, sizeof(buf), "Camera Zoom: %.1fx", newZoom);
+      zoomLabel->text = buf;
+    }
+  });
+
+  // 4. Jump Push Button with Icon & Textured Skin (Button)
   auto jumpBtn = controlsPanel->addChild<Button>("Jump Action");
-  jumpBtn->setPosition({20.0f, 150.0f});
-  jumpBtn->setSize({290.0f, 44.0f});
-  jumpBtn->fontSize = 18.0f;
+  jumpBtn->setPosition({20.0f, 192.0f});
+  jumpBtn->setSize({290.0f, 40.0f});
+  jumpBtn->fontSize = 17.0f;
   jumpBtn->icon = coinTex;
-  jumpBtn->iconSize = {22.0f, 22.0f};
+  jumpBtn->iconSize = {20.0f, 20.0f};
   jumpBtn->textureNormal = btnTex;
   jumpBtn->patchMarginLeft = 12.0f;
   jumpBtn->patchMarginTop = 12.0f;

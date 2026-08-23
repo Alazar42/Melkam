@@ -58,4 +58,24 @@ sprite->flipH = true;          // Flip horizontally
 
 ## 4. `Camera2D` ([include/nodes/2D/Camera2D.hpp](file:///c:/Users/Micky/Documents/CppProjects/MelkamEngine/include/nodes/2D/Camera2D.hpp))
 
-2D viewport and camera controller with world-to-screen and screen-to-world mapping.
+2D viewport and camera controller with world-to-screen and screen-to-world mapping, `AnchorMode::DragCenter` support, and Godot-style active camera management (`makeCurrent()`).
+
+### Features:
+- **Active Camera Registration**: `camera->makeCurrent()` / `camera->make_current()` makes the camera the active camera for the 2D render pass.
+- **Anchor Modes**: `AnchorMode::DragCenter` (default, centers the screen on the camera position) or `AnchorMode::FixedTopLeft`.
+- **Node Hierarchy Attachment**: Attach `Camera2D` to any `Node2D` (such as `PlayerNode`) via `addChild<Camera2D>()` so it automatically tracks the parent's world position.
+- **Zoom & Limits**: `setZoom(float)`, `setLimit(left, top, right, bottom)`.
+
+### Example:
+```cpp
+class PlayerNode : public CharacterBody2D {
+public:
+  std::shared_ptr<Camera2D> camera = nullptr;
+
+  void onReady() override {
+    // Attach Camera2D and make current so the viewport follows the player
+    camera = addChild<Camera2D>();
+    camera->makeCurrent();
+  }
+};
+```
