@@ -1,3 +1,13 @@
-/TegenModules/
+# Build directories
 /build/
+/build-ninja/
 /lib/
+/TegenModules/
+/bin/
+
+# Conan & IDE
+/.vsconan/
+/.vscode/
+/.clangd/
+CMakeUserPresets.json
+*.user
