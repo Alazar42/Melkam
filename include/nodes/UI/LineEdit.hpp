@@ -2,7 +2,9 @@
 
 #include "core/Memory.hpp"
 #include "nodes/UI/Control.hpp"
+#include "nodes/UI/Icons.hpp"
 #include "renderers/Font.hpp"
+
 #include "time.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -216,11 +218,15 @@ public:
       float cbSize = 16.0f;
       float cbX = rect.position.x + rect.size.x - cbSize - 8.0f;
       float cbY = rect.position.y + (rect.size.y - cbSize) * 0.5f;
-      Renderer2D::drawCircle(Vector2(cbX + cbSize * 0.5f, cbY + cbSize * 0.5f), cbSize * 0.5f,
-                             Color::from_rgba8(80, 85, 105), true);
-      Renderer2D::drawText("x", Vector2(cbX + 4.5f, cbY + 1.0f), Color::WHITE, 12.0f, activeFont);
+      Vector2 center{cbX + cbSize * 0.5f, cbY + cbSize * 0.5f};
+      Vector2 mousePos = Input::getMousePosition();
+      bool isHover = Rect2(cbX, cbY, cbSize, cbSize).hasPoint(mousePos);
+      Color cbBg = isHover ? Color::from_rgba8(110, 120, 150) : Color::from_rgba8(70, 75, 95);
+      Renderer2D::drawCircleScreen(center, cbSize * 0.5f, cbBg, true);
+      Icons::draw(IconType::Close, center, 10.0f, Color::WHITE);
     }
   }
+
 
 private:
   int getCursorPosFromMouse(float mouseX) {

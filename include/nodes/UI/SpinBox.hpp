@@ -1,8 +1,10 @@
 #pragma once
 
 #include "core/Memory.hpp"
+#include "nodes/UI/Icons.hpp"
 #include "nodes/UI/LineEdit.hpp"
 #include "nodes/UI/Range.hpp"
+
 #include "renderers/Font.hpp"
 #include "renderers/Renderer2D.hpp"
 #include <algorithm>
@@ -123,9 +125,12 @@ public:
     Color downCol = downRect.hasPoint(mousePos) ? buttonHoverColor : buttonColor;
 
     Renderer2D::drawRoundedRectScreen(upRect.position, upRect.size, 2.0f, upCol * modulate);
-    Renderer2D::drawText("^", Vector2(upRect.position.x + 6.0f, upRect.position.y - 1.0f), Color::WHITE, 12.0f, activeFont);
+    Vector2 upCenter = upRect.position + upRect.size * 0.5f;
+    Icons::draw(IconType::ChevronUp, upCenter, 10.0f, Color::WHITE, 1.5f);
 
     Renderer2D::drawRoundedRectScreen(downRect.position, downRect.size, 2.0f, downCol * modulate);
-    Renderer2D::drawText("v", Vector2(downRect.position.x + 6.0f, downRect.position.y - 2.0f), Color::WHITE, 10.0f, activeFont);
+    Vector2 downCenter = downRect.position + downRect.size * 0.5f;
+    Icons::draw(IconType::ChevronDown, downCenter, 10.0f, Color::WHITE, 1.5f);
   }
 };
+

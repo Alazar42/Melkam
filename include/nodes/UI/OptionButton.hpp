@@ -2,7 +2,9 @@
 
 #include "core/Memory.hpp"
 #include "nodes/UI/Button.hpp"
+#include "nodes/UI/Icons.hpp"
 #include "renderers/Font.hpp"
+
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -218,11 +220,11 @@ public:
                            activeSize, activeFont);
     }
 
-    // 3. Draw Dropdown Arrow Indicator
-    float arrowX = rect.position.x + rect.size.x - 20.0f;
-    float arrowY = rect.position.y + (rect.size.y - activeSize) * 0.5f;
-    Renderer2D::drawText("v", Vector2(arrowX, arrowY), txtCol * modulate, 12.0f, activeFont);
+    // 3. Draw Dropdown Chevron Icon
+    Vector2 arrowCenter{rect.position.x + rect.size.x - 18.0f, rect.position.y + rect.size.y * 0.5f};
+    Icons::draw(IconType::ChevronDown, arrowCenter, 14.0f, txtCol * modulate, 2.0f);
   }
+
 
 private:
   bool m_isMenuOpen = false;

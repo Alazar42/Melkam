@@ -2,7 +2,9 @@
 
 #include "core/Memory.hpp"
 #include "nodes/UI/Control.hpp"
+#include "nodes/UI/Icons.hpp"
 #include "nodes/UI/StyleBox.hpp"
+
 #include "renderers/Font.hpp"
 #include "renderers/Renderer2D.hpp"
 #include <algorithm>
@@ -195,9 +197,11 @@ public:
       bool isCloseHover = closeRect.hasPoint(mousePos);
       Color cbCol = isCloseHover ? closeButtonHoverColor : Color::from_rgba8(60, 65, 85);
       Renderer2D::drawRoundedRectScreen(closeRect.position, closeRect.size, 3.0f, cbCol);
-      Renderer2D::drawText("x", Vector2(closeRect.position.x + 6.0f, closeRect.position.y + 1.0f), Color::WHITE, 13.0f, activeFont);
+      Vector2 closeCenter = closeRect.position + closeRect.size * 0.5f;
+      Icons::draw(IconType::Close, closeCenter, 10.0f, Color::WHITE, 2.0f);
     }
   }
+
 
 protected:
   bool m_isOpen = false;

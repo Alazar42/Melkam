@@ -2,7 +2,9 @@
 
 #include "core/Memory.hpp"
 #include "nodes/UI/Control.hpp"
+#include "nodes/UI/Icons.hpp"
 #include "nodes/UI/StyleBox.hpp"
+
 #include "renderers/Font.hpp"
 #include "renderers/Renderer2D.hpp"
 #include "renderers/Texture2D.hpp"
@@ -194,17 +196,23 @@ private:
         float indY = itemRect.position.y + (itemHeight - indSize) * 0.5f;
 
         if (item.isRadio) {
-          Renderer2D::drawCircle(Vector2(indX + indSize * 0.5f, indY + indSize * 0.5f), indSize * 0.5f,
-                                 item.checked ? Color::from_rgba8(52, 199, 89) : Color::from_rgba8(70, 75, 95));
+          Renderer2D::drawCircleScreen(Vector2(indX + indSize * 0.5f, indY + indSize * 0.5f), indSize * 0.5f,
+                                       item.checked ? Color::from_rgba8(52, 199, 89) : Color::from_rgba8(70, 75, 95), true);
+          if (item.checked) {
+            Renderer2D::drawCircleScreen(Vector2(indX + indSize * 0.5f, indY + indSize * 0.5f), indSize * 0.25f,
+                                         Color::WHITE, true);
+          }
         } else {
           Renderer2D::drawRoundedRectScreen(Vector2(indX, indY), Vector2(indSize, indSize), 2.0f,
                                             item.checked ? Color::from_rgba8(52, 120, 246) : Color::from_rgba8(45, 48, 65),
                                             Color::from_rgba8(90, 95, 120), 1.0f);
           if (item.checked) {
-            Renderer2D::drawRoundedRectScreen(Vector2(indX + 3.0f, indY + 3.0f), Vector2(indSize - 6.0f, indSize - 6.0f), 1.0f, Color::WHITE);
+            Vector2 checkCenter = Vector2(indX + indSize * 0.5f, indY + indSize * 0.5f);
+            Icons::draw(IconType::Check, checkCenter, indSize * 0.8f, Color::WHITE, 1.8f);
           }
         }
       } else if (item.icon && item.icon->isValid()) {
+
         float icSize = 16.0f;
         float icX = itemRect.position.x + 6.0f;
         float icY = itemRect.position.y + (itemHeight - icSize) * 0.5f;

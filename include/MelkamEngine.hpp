@@ -84,6 +84,8 @@
 #include "nodes/UI/StyleBox.hpp"
 #include "nodes/UI/Control.hpp"
 #include "nodes/UI/Range.hpp"
+#include "nodes/UI/Icons.hpp"
+
 #include "nodes/UI/Label.hpp"
 #include "nodes/UI/RichTextLabel.hpp"
 #include "nodes/UI/CheckBox.hpp"

@@ -2,9 +2,11 @@
 
 #include "animation/Tween.hpp"
 #include "core/Node.hpp"
-
 #include "input.hpp"
+#include "nodes/2D/Camera2D.hpp"
 #include "nodes/UI/Control.hpp"
+#include "renderers/Renderer2D.hpp"
+
 #include <memory>
 #include <utility>
 #include <vector>
@@ -48,7 +50,9 @@ public:
     if (m_hasPendingScene) {
       m_hasPendingScene = false;
       Control::clearAllOverlays();
+      Camera2D::clearCurrentCamera();
       m_tweens.clear();
+
       if (m_root) {
         m_root->onDestroy();
       }
@@ -59,6 +63,7 @@ public:
       }
     }
   }
+
 
   void quit() {
     std::exit(0);

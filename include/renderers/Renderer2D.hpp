@@ -380,7 +380,100 @@ public:
     }
   }
 
+  // Draws an anti-aliased line directly in screen space.
+  static void drawLineScreen(const Vector2 &p1, const Vector2 &p2,
+                             const Color &color, float width = 1.5f) {
+    if (!s_renderer) return;
+
+    if (width <= 1.0f) {
+      setDrawColor(color);
+      SDL_RenderLine(s_renderer, p1.x, p1.y, p2.x, p2.y);
+      return;
+    }
+
+    Vector2 dir = p2 - p1;
+    float len = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+    if (len < 0.0001f) return;
+
+    Vector2 normal(-dir.y / len, dir.x / len);
+    Vector2 offset = normal * (width * 0.5f);
+
+    Vector2 v0 = p1 + offset;
+    Vector2 v1 = p2 + offset;
+    Vector2 v2 = p2 - offset;
+    Vector2 v3 = p1 - offset;
+
+    SDL_FColor sdlColor = toSDLColor(color);
+    SDL_Vertex verts[4] = {
+        {{v0.x, v0.y}, sdlColor, {0.0f, 0.0f}},
+        {{v1.x, v1.y}, sdlColor, {0.0f, 0.0f}},
+        {{v2.x, v2.y}, sdlColor, {0.0f, 0.0f}},
+        {{v3.x, v3.y}, sdlColor, {0.0f, 0.0f}}};
+    int indices[6] = {0, 1, 2, 0, 2, 3};
+    SDL_RenderGeometry(s_renderer, nullptr, verts, 4, indices, 6);
+  }
+
+  // Draws a filled or outlined triangle directly in screen space.
+  static void drawTriangleScreen(const Vector2 &p1, const Vector2 &p2, const Vector2 &p3,
+                                 const Color &color, bool filled = true) {
+    if (!s_renderer) return;
+    if (filled) {
+      SDL_FColor sdlColor = toSDLColor(color);
+      SDL_Vertex verts[3] = {
+          {{p1.x, p1.y}, sdlColor, {0.0f, 0.0f}},
+          {{p2.x, p2.y}, sdlColor, {0.0f, 0.0f}},
+          {{p3.x, p3.y}, sdlColor, {0.0f, 0.0f}}};
+      int indices[3] = {0, 1, 2};
+      SDL_RenderGeometry(s_renderer, nullptr, verts, 3, indices, 3);
+    } else {
+      SDL_FPoint points[4] = {{p1.x, p1.y}, {p2.x, p2.y}, {p3.x, p3.y}, {p1.x, p1.y}};
+      setDrawColor(color);
+      SDL_RenderLines(s_renderer, points, 4);
+    }
+  }
+
+  // Draws a circle directly in screen space.
+  static void drawCircleScreen(const Vector2 &center, float radius,
+                               const Color &color, bool filled = true, int segments = 24) {
+    if (!s_renderer || radius <= 0.0f) return;
+
+    if (filled) {
+      std::vector<SDL_Vertex> verts;
+      verts.reserve(segments + 2);
+      SDL_FColor sdlColor = toSDLColor(color);
+      verts.push_back({{center.x, center.y}, sdlColor, {0.0f, 0.0f}});
+
+      for (int i = 0; i <= segments; ++i) {
+        float theta = (static_cast<float>(i) / segments) * 6.2831853f;
+        float vx = center.x + std::cos(theta) * radius;
+        float vy = center.y + std::sin(theta) * radius;
+        verts.push_back({{vx, vy}, sdlColor, {0.0f, 0.0f}});
+      }
+
+      std::vector<int> indices;
+      indices.reserve(segments * 3);
+      for (int i = 1; i <= segments; ++i) {
+        indices.push_back(0);
+        indices.push_back(i);
+        indices.push_back(i + 1);
+      }
+      SDL_RenderGeometry(s_renderer, nullptr, verts.data(), static_cast<int>(verts.size()),
+                         indices.data(), static_cast<int>(indices.size()));
+    } else {
+      std::vector<SDL_FPoint> points;
+      points.reserve(segments + 1);
+      for (int i = 0; i <= segments; ++i) {
+        float theta = (static_cast<float>(i) / segments) * 6.2831853f;
+        points.push_back({center.x + std::cos(theta) * radius,
+                          center.y + std::sin(theta) * radius});
+      }
+      setDrawColor(color);
+      SDL_RenderLines(s_renderer, points.data(), static_cast<int>(points.size()));
+    }
+  }
+
   // Draws a texture directly in screen space.
+
   static void drawTextureScreen(const Texture2D &texture, const Rect2 &srcRect,
                                 const Vector2 &screenPos, const Vector2 &size,
                                 const Color &tint = Color::WHITE) {
@@ -412,6 +505,41 @@ public:
                                       const Color &tint = Color::WHITE) {
     if (texture) drawTextureScreen(*texture, srcRect, screenPos, size, tint);
   }
+
+  // Draws a 9-patch / 9-slice scalable texture directly in screen space.
+  static void drawNinePatchTextureScreen(const Texture2D *texture, const Vector2 &screenPos,
+                                         const Vector2 &size, float marginLeft, float marginTop,
+                                         float marginRight, float marginBottom,
+                                         const Color &tint = Color::WHITE, bool drawCenter = true) {
+    if (!s_renderer || !texture || !texture->isValid()) return;
+
+    Vector2 srcSize = texture->getSize();
+    float ml = marginLeft;
+    float mt = marginTop;
+    float mr = marginRight;
+    float mb = marginBottom;
+
+    float srcX[4] = {0.0f, ml, srcSize.x - mr, srcSize.x};
+    float srcY[4] = {0.0f, mt, srcSize.y - mb, srcSize.y};
+
+    float dstX[4] = {screenPos.x, screenPos.x + ml, screenPos.x + size.x - mr, screenPos.x + size.x};
+    float dstY[4] = {screenPos.y, screenPos.y + mt, screenPos.y + size.y - mb, screenPos.y + size.y};
+
+    for (int row = 0; row < 3; ++row) {
+      for (int col = 0; col < 3; ++col) {
+        if (row == 1 && col == 1 && !drawCenter) continue;
+
+        Rect2 patchSrc(srcX[col], srcY[row], srcX[col + 1] - srcX[col], srcY[row + 1] - srcY[row]);
+        Vector2 patchDstPos(dstX[col], dstY[row]);
+        Vector2 patchDstSize(dstX[col + 1] - dstX[col], dstY[row + 1] - dstY[row]);
+
+        if (patchSrc.size.x > 0 && patchSrc.size.y > 0 && patchDstSize.x > 0 && patchDstSize.y > 0) {
+          drawTextureScreen(*texture, patchSrc, patchDstPos, patchDstSize, tint);
+        }
+      }
+    }
+  }
+
 
   // Returns the active SDL_Renderer handle.
   static SDL_Renderer *getRenderer() {

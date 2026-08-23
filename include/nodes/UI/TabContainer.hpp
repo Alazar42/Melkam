@@ -95,16 +95,19 @@ public:
           std::string title = getTabTitle(i);
           float tabW = f.getStringSize(title, activeSize).x + 24.0f;
           if (relX >= currX && relX < currX + tabW) {
-            tab_clicked.emit(i);
             setCurrentTab(i);
+            tab_clicked.emit(i);
             const_cast<InputEvent &>(event).setHandled();
             return;
           }
           currX += tabW + 2.0f;
         }
+        // Consume click on tab header area so it never leaks through
+        const_cast<InputEvent &>(event).setHandled();
       }
     }
   }
+
 
   void fitChildControls() override {
     Rect2 rect = getGlobalRect();

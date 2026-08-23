@@ -176,7 +176,7 @@ void MainMenuScene::onReady() {
   vbox->addChild<HSeparator>();
 
   // 1. Play Button
-  auto playBtn = vbox->addChild<Button>("▶  Play Platformer Game");
+  auto playBtn = vbox->addChild<Button>(IconType::Play, "Play Platformer Game");
   playBtn->customMinimumSize = {400.0f, 46.0f};
   playBtn->fontSize = 17.0f;
   playBtn->pressed.connect([this]() {
@@ -185,7 +185,7 @@ void MainMenuScene::onReady() {
   });
 
   // 2. UI Simulation Button
-  auto uiBtn = vbox->addChild<Button>("⚙  UI Simulation & Showcase");
+  auto uiBtn = vbox->addChild<Button>(IconType::Gear, "UI Simulation & Showcase");
   uiBtn->customMinimumSize = {400.0f, 46.0f};
   uiBtn->fontSize = 17.0f;
   uiBtn->pressed.connect([this]() {
@@ -203,7 +203,7 @@ void MainMenuScene::onReady() {
       "• Hardware-accelerated 2D Batching with SDL3",
       "About MelkamEngine");
 
-  auto aboutBtn = vbox->addChild<Button>("ℹ  About MelkamEngine");
+  auto aboutBtn = vbox->addChild<Button>(IconType::Info, "About MelkamEngine");
   aboutBtn->customMinimumSize = {400.0f, 42.0f};
   aboutBtn->fontSize = 15.0f;
   aboutBtn->pressed.connect([aboutDialog]() {
@@ -217,12 +217,13 @@ void MainMenuScene::onReady() {
     getTree()->quit();
   });
 
-  auto quitBtn = vbox->addChild<Button>("✖  Quit");
+  auto quitBtn = vbox->addChild<Button>(IconType::Close, "Quit");
   quitBtn->customMinimumSize = {400.0f, 42.0f};
   quitBtn->fontSize = 15.0f;
   quitBtn->pressed.connect([quitDialog]() {
     if (quitDialog) quitDialog->popupCentered({380.0f, 180.0f});
   });
+
 
   vbox->addChild<HSeparator>();
 
@@ -353,9 +354,9 @@ void GameScene::onReady() {
   hudTheme->setColor("border_color", "ProgressBar", Color::from_rgba8(35, 110, 175));
 
   // Top Navigation / Back Button
-  auto backBtn = addChild<Button>("⮌ Back to Menu");
+  auto backBtn = addChild<Button>(IconType::ArrowBack, "Back to Menu");
   backBtn->setPosition({24.0f, 16.0f});
-  backBtn->setSize({150.0f, 34.0f});
+  backBtn->setSize({160.0f, 34.0f});
   backBtn->fontSize = 15.0f;
   backBtn->pressed.connect([this]() {
     getTree()->changeScene(makeRef<MainMenuScene>());
@@ -487,9 +488,9 @@ void UISimulationScene::onReady() {
   topNav->borderColor = Color::from_rgba8(60, 70, 95);
   topNav->borderWidth = 1.0f;
 
-  auto backBtn = topNav->addChild<Button>("⮌ Back to Main Menu");
+  auto backBtn = topNav->addChild<Button>(IconType::ArrowBack, "Back to Main Menu");
   backBtn->setPosition({16.0f, 8.0f});
-  backBtn->setSize({170.0f, 32.0f});
+  backBtn->setSize({180.0f, 32.0f});
   backBtn->fontSize = 15.0f;
   backBtn->pressed.connect([this]() {
     getTree()->changeScene(makeRef<MainMenuScene>());

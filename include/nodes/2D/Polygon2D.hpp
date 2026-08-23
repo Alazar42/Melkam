@@ -65,15 +65,22 @@ public:
       vertices.push_back({{screenPt.x, screenPt.y}, vCol, {uvCoord.x, uvCoord.y}});
     }
 
+    // Safety guard: ensure indices are within vertices bounds
+    for (int idx : m_trianglesCache) {
+      if (idx < 0 || idx >= static_cast<int>(vertices.size())) {
+        return;
+      }
+    }
+
     SDL_Renderer *sdlRenderer = Renderer2D::getRenderer();
     if (!sdlRenderer) return;
-
 
     SDL_Texture *nativeTex = (texture && texture->isValid()) ? texture->getNativeTexture() : nullptr;
     SDL_RenderGeometry(sdlRenderer, nativeTex, vertices.data(),
                        static_cast<int>(vertices.size()), m_trianglesCache.data(),
                        static_cast<int>(m_trianglesCache.size()));
   }
+
 
 private:
   // Ear-Clipping Triangulation for 2D Polygons

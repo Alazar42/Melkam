@@ -2,7 +2,9 @@
 
 #include "core/Memory.hpp"
 #include "nodes/UI/Control.hpp"
+#include "nodes/UI/Icons.hpp"
 #include "renderers/Font.hpp"
+
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -211,11 +213,10 @@ public:
 
     // 3. Draw Checkmark if checked
     if (buttonPressed) {
-      float pad = 4.0f;
-      Vector2 markPos = boxPos + Vector2(pad, pad);
-      Vector2 markSize = Vector2(boxSize - pad * 2.0f, boxSize - pad * 2.0f);
-      Renderer2D::drawRoundedRectScreen(markPos, markSize, 2.0f, checkCol * modulate);
+      Vector2 markCenter = boxPos + Vector2(boxSize * 0.5f, boxSize * 0.5f);
+      Icons::draw(IconType::Check, markCenter, boxSize * 0.75f, checkCol * modulate, 2.0f);
     }
+
 
     // 4. Draw Label Text
     if (!text.empty()) {

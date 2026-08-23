@@ -36,11 +36,22 @@ public:
     transform.position = targetPos;
   }
 
+  ~Camera2D() override {
+    if (s_currentCamera == this) {
+      s_currentCamera = nullptr;
+    }
+  }
+
   void onDestroy() override {
     if (s_currentCamera == this) {
       s_currentCamera = nullptr;
     }
   }
+
+  static void clearCurrentCamera() {
+    s_currentCamera = nullptr;
+  }
+
 
   // Makes this camera the active/current camera for 2D scene rendering.
   void makeCurrent() {
