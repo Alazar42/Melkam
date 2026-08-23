@@ -5,10 +5,11 @@
 <h1 align="center">Melkam Engine</h1>
 
 <p align="center">
-  <strong>A modern, lightweight C++ game engine framework inspired by the Godot architecture.</strong>
+  <strong>A modern, lightweight 2D C++ game engine framework inspired by the Godot architecture.</strong>
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/Status-2D%20Complete-brightgreen.svg" alt="2D Complete">
   <img src="https://img.shields.io/badge/C%2B%2B-20-blue.svg" alt="C++20">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg" alt="Cross Platform">
@@ -16,9 +17,9 @@
 
 ---
 
-## Overview
+## Current Status: 2D Engine Complete
 
-**Melkam Engine** is a cross-platform 2D/3D game engine and library written in modern C++20. Designed with a clean, ergonomic node tree hierarchy inspired by Godot 4, it provides developers with modular building blocks for scene management, rendering, physics, and UI theming.
+> **Note for Developers**: The **2D Engine core is fully featured and complete**! It includes the full 2D scene tree hierarchy, Box2D physics simulation, canvas UI system, 9-slice rendering, theme inheritance, and subpixel font engines. 3D features are part of the future roadmap.
 
 ## Key Features
 
