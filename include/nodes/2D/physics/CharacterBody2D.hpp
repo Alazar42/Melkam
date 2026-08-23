@@ -79,6 +79,16 @@ public:
     return KinematicCollision2D{};
   }
 
+  // Returns the velocity of the moving platform the character is currently standing on
+  Vector2 getPlatformVelocity() const {
+    return m_platformVelocity;
+  }
+
+  // Returns the collider object the character is currently standing on
+  CollisionObject2D *getFloorCollider() const {
+    return m_floorCollider;
+  }
+
   // ===========================================================================
   // Kinematic Swept Collision & Slide Algorithm
   // ===========================================================================
@@ -121,6 +131,7 @@ public:
       // Swept AABB intersection test
       float tEntryX, tExitX, tEntryY, tExitY;
 
+
       if (motion.x > 0.0f) {
         tEntryX = (minBound.x - pos0.x) / motion.x;
         tExitX = (maxBound.x - pos0.x) / motion.x;
@@ -128,7 +139,7 @@ public:
         tEntryX = (maxBound.x - pos0.x) / motion.x;
         tExitX = (minBound.x - pos0.x) / motion.x;
       } else {
-        if (pos0.x <= minBound.x || pos0.x >= maxBound.x) continue;
+        if (pos0.x < minBound.x || pos0.x > maxBound.x) continue;
         tEntryX = -std::numeric_limits<float>::infinity();
         tExitX = std::numeric_limits<float>::infinity();
       }
@@ -140,7 +151,7 @@ public:
         tEntryY = (maxBound.y - pos0.y) / motion.y;
         tExitY = (minBound.y - pos0.y) / motion.y;
       } else {
-        if (pos0.y <= minBound.y || pos0.y >= maxBound.y) continue;
+        if (pos0.y < minBound.y || pos0.y > maxBound.y) continue;
         tEntryY = -std::numeric_limits<float>::infinity();
         tExitY = std::numeric_limits<float>::infinity();
       }
@@ -162,6 +173,7 @@ public:
         bestNormal = (motion.y < 0.0f) ? Vector2(0.0f, 1.0f) : Vector2(0.0f, -1.0f);
       }
     }
+
 
     if (bestCollider != nullptr && earliestTime < 1.0f) {
       result.collided = true;
@@ -192,12 +204,26 @@ public:
 
     ensureBody();
 
+    // 1. Moving Platform Floor Tracking (Godot 4 Platform Riding)
+    if (m_isOnFloor && m_floorCollider) {
+      Vector2 currentFloorPos = m_floorCollider->getGlobalPhysicsPosition();
+      Vector2 platformDelta = currentFloorPos - m_lastFloorPos;
+      if (platformDelta.length_squared() > 0.00001f) {
+        transform.position += platformDelta;
+        m_platformVelocity = platformDelta / dt;
+      }
+      m_lastFloorPos = currentFloorPos;
+    } else {
+      m_platformVelocity = {0.0f, 0.0f};
+    }
+
     m_slideCollisions.clear();
     m_isOnFloor = false;
     m_isOnWall = false;
     m_isOnCeiling = false;
     m_floorNormal = {0.0f, -1.0f};
     m_wallNormal = {0.0f, 0.0f};
+    CollisionObject2D *newFloorCollider = nullptr;
 
     Vector2 motion = velocity * dt;
     bool hasCollided = false;
@@ -219,7 +245,9 @@ public:
         // Floor contact (surface normal pointing up, aligned with upDirection)
         m_isOnFloor = true;
         m_floorNormal = col.normal;
+        newFloorCollider = dynamic_cast<CollisionObject2D *>(col.collider);
         if (velocity.y > 0.0f) {
+
           velocity.y = 0.0f;
         }
       } else if (dotUp <= -0.7f) {
@@ -250,7 +278,13 @@ public:
 
     // Downward ground probe to stay snapped to floors/platforms
     if (motionMode == MotionMode::Grounded && !m_isOnFloor && velocity.y >= 0.0f) {
-      probeFloor();
+      probeFloor(newFloorCollider);
+    }
+
+    // Update floor collider tracking for next frame
+    m_floorCollider = newFloorCollider;
+    if (m_floorCollider) {
+      m_lastFloorPos = m_floorCollider->getGlobalPhysicsPosition();
     }
 
     // Sync Box2D body transform for sensor queries and trigger detections
@@ -262,7 +296,7 @@ public:
   }
 
 protected:
-  void probeFloor() {
+  void probeFloor(CollisionObject2D *&outCollider) {
     Vector2 probeMotion = -upDirection * floorSnapLength;
     KinematicCollision2D probeCol = moveAndCollide(probeMotion, true);
     if (probeCol.collided) {
@@ -270,6 +304,8 @@ protected:
       if (dotUp >= 0.7f) {
         m_isOnFloor = true;
         m_floorNormal = probeCol.normal;
+        outCollider = dynamic_cast<CollisionObject2D *>(probeCol.collider);
+
         // Snap player position flush onto the floor surface
         transform.position += probeCol.travel;
         if (velocity.y > 0.0f) {
@@ -307,4 +343,8 @@ private:
   Vector2 m_floorNormal{0.0f, -1.0f};
   Vector2 m_wallNormal{0.0f, 0.0f};
   std::vector<KinematicCollision2D> m_slideCollisions;
+  CollisionObject2D *m_floorCollider = nullptr;
+  Vector2 m_lastFloorPos{0.0f, 0.0f};
+  Vector2 m_platformVelocity{0.0f, 0.0f};
 };
+

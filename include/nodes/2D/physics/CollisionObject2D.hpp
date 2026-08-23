@@ -34,22 +34,21 @@ public:
   bool visualFilled = true;
 
   virtual Vector2 getHalfExtents() const {
+    Transform2D globalTrans = getGlobalTransform();
     if (shapeType == CollisionShapeType::Circle) {
-      return {shapeRadius, shapeRadius};
+      return {shapeRadius * std::abs(globalTrans.scale.x), shapeRadius * std::abs(globalTrans.scale.y)};
     }
-    return shapeSize * 0.5f;
+    return Vector2(shapeSize.x * std::abs(globalTrans.scale.x), shapeSize.y * std::abs(globalTrans.scale.y)) * 0.5f;
   }
 
   virtual bool isSensorBody() const { return false; }
   virtual bool isDynamicBody() const { return false; }
 
   Vector2 getGlobalPhysicsPosition() const {
-    if (isBodyValid() && isDynamicBody()) {
-      b2Vec2 pos = b2Body_GetPosition(m_bodyId);
-      return PhysicsServer2D::toPixels(pos);
-    }
     return getGlobalPosition();
   }
+
+
 
   CollisionObject2D() : Node2D("CollisionObject2D") {
     PhysicsServer2D::registerObject(this);

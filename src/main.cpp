@@ -263,14 +263,15 @@ void GameScene::onReady() {
   movingPath->curve->addPoint({750.0f, 210.0f}, {-60.0f, 30.0f}, {60.0f, 30.0f});
   movingPath->curve->addPoint({1000.0f, 260.0f}, {-80.0f, -40.0f}, {0.0f, 0.0f});
 
-  auto moverFollow = movingPath->addChild<PathFollow2D>(140.0f, true); // Moves back and forth along curve (ping-pong)
+  auto moverFollow = movingPath->addChild<PathFollow2D>(120.0f, true); // Moves back and forth along curve (ping-pong)
   moverFollow->rotates = false;
   moverFollow->pingPong = true;
-  auto moverPlat = moverFollow->addChild<StaticBody2D>("MovingPlatform");
 
-  auto moverShape = moverPlat->addChild<CollisionShape2D>(Vector2(140.0f, 32.0f));
+  auto moverPlat = moverFollow->addChild<StaticBody2D>("MovingPlatform");
+  auto moverShape = moverPlat->addChild<CollisionShape2D>(Vector2(200.0f, 36.0f));
   auto moverSprite = moverShape->addChild<Sprite2D>("assets/sprites/grass_platform.png");
-  moverSprite->size = {140.0f, 32.0f};
+  moverSprite->size = {200.0f, 36.0f};
+
 
   // Guide Polyline (Line2D)
   auto guideLine = addChild<Line2D>();
