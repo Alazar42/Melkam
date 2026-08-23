@@ -123,23 +123,12 @@ public:
       scrollVertical -= event.mouseScroll.y * 24.0f;
       scrollVertical = std::max(0.0f, scrollVertical);
       const_cast<InputEvent &>(event).setHandled();
-    }
-  }
-
-  void onInput(const InputEvent &event) override {
-    Control::onInput(event);
-
-    if (!hasFocus() || !editable) return;
-
-    if (event.type == InputEventType::MouseButton && event.isPressed()) {
-      if (!getGlobalRect().hasPoint(event.mousePosition)) {
-        releaseFocus();
-      }
     } else if (event.type == InputEventType::Key && event.isPressed()) {
       handleKeyPress(event);
       const_cast<InputEvent &>(event).setHandled();
     }
   }
+
 
   void drawControl() override {
     Rect2 rect = getGlobalRect();

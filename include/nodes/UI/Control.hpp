@@ -371,7 +371,18 @@ public:
 
   // Handles raw input events routed to GUI
   void onInput(const InputEvent &event) override {
-    if (!visible || mouseFilter == MouseFilter::Ignore) return;
+    if (!visible) return;
+
+    // 1. Keyboard event: route directly to focused control
+    if (event.type == InputEventType::Key) {
+      if (hasFocus()) {
+        gui_input.emit(event);
+        onGuiInput(event);
+      }
+      return;
+    }
+
+    if (mouseFilter == MouseFilter::Ignore) return;
 
     Vector2 mousePos = Input::getMousePosition();
     Rect2 screenRect = getGlobalRect();
@@ -385,14 +396,21 @@ public:
       mouse_exited.emit();
     }
 
+    if (event.type == InputEventType::MouseButton && event.isPressed()) {
+      if (!inside && hasFocus()) {
+        releaseFocus();
+      }
+    }
+
     if (inside) {
       gui_input.emit(event);
       onGuiInput(event);
-      if (mouseFilter == MouseFilter::Stop) {
+      if (mouseFilter == MouseFilter::Stop && event.type == InputEventType::MouseButton) {
         const_cast<InputEvent &>(event).setHandled();
       }
     }
   }
+
 
   // Custom GUI input callback overridden by subclasses (Button, etc.)
   virtual void onGuiInput(const InputEvent &event) {
@@ -430,13 +448,20 @@ public:
         s_overlays.end());
   }
 
+  static void clearAllOverlays() {
+    s_overlays.clear();
+  }
+
   static bool hasActiveOverlay() {
     return !s_overlays.empty();
   }
 
   static bool processOverlayInput(const InputEvent &event) {
-    for (auto it = s_overlays.rbegin(); it != s_overlays.rend(); ++it) {
-      if (it->inputCallback && it->inputCallback(event)) {
+    auto overlaysCopy = s_overlays;
+    for (auto it = overlaysCopy.rbegin(); it != overlaysCopy.rend(); ++it) {
+      bool stillPresent = std::any_of(s_overlays.begin(), s_overlays.end(),
+                                      [&](const OverlayItem &o) { return o.owner == it->owner; });
+      if (stillPresent && it->inputCallback && it->inputCallback(event)) {
         return true;
       }
     }
@@ -444,10 +469,16 @@ public:
   }
 
   static void renderOverlays() {
-    for (auto &item : s_overlays) {
-      if (item.drawCallback) item.drawCallback();
+    auto overlaysCopy = s_overlays;
+    for (auto &item : overlaysCopy) {
+      bool stillPresent = std::any_of(s_overlays.begin(), s_overlays.end(),
+                                      [&](const OverlayItem &o) { return o.owner == item.owner; });
+      if (stillPresent && item.drawCallback) {
+        item.drawCallback();
+      }
     }
   }
+
 
 protected:
   bool m_isHovered = false;

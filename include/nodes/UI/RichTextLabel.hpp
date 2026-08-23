@@ -4,7 +4,9 @@
 #include "nodes/UI/Control.hpp"
 #include "renderers/Font.hpp"
 #include "renderers/Renderer2D.hpp"
+#include <SDL3/SDL.h>
 #include <algorithm>
+
 #include <memory>
 #include <sstream>
 #include <string>
@@ -44,18 +46,34 @@ public:
   RichTextLabel() : Control("RichTextLabel") {
     customMinimumSize = {200.0f, 60.0f};
     mouseFilter = MouseFilter::Stop;
+    meta_clicked.connect([](const std::string &url) {
+      if (!url.empty()) {
+        SDL_OpenURL(url.c_str());
+      }
+    });
   }
 
   explicit RichTextLabel(std::string text)
       : Control("RichTextLabel"), bbcode(std::move(text)) {
     customMinimumSize = {200.0f, 60.0f};
     mouseFilter = MouseFilter::Stop;
+    meta_clicked.connect([](const std::string &url) {
+      if (!url.empty()) {
+        SDL_OpenURL(url.c_str());
+      }
+    });
   }
+
 
   void setText(std::string text) {
     bbcode = std::move(text);
     m_needsRebuild = true;
   }
+
+  void setBbcode(std::string text) {
+    setText(std::move(text));
+  }
+
 
   void appendText(const std::string &moreText) {
     bbcode += moreText;

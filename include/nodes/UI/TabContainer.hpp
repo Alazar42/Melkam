@@ -67,6 +67,16 @@ public:
     return static_cast<int>(getTabControls().size());
   }
 
+  template <typename T = Control>
+  Ref<T> addTab(std::string title) {
+    auto tab = addChild<T>();
+    tab->name = title;
+    int idx = getTabCount() - 1;
+    setTabTitle(idx, std::move(title));
+    return tab;
+  }
+
+
   void onGuiInput(const InputEvent &event) override {
     if (!tabsVisible) return;
 

@@ -199,36 +199,55 @@ public:
     return false;
   }
 
-  // Returns single-line text dimensions in screen pixels.
+  // Returns single/multi-line text dimensions in screen pixels.
   Vector2 getStringSize(const std::string &text, float customFontSize = 0.0f) const {
     if (text.empty()) return {0.0f, 0.0f};
 
     float reqSize = (customFontSize > 0.0f) ? customFontSize : m_baseFontSize;
 
     if (!m_isTTF || m_ranges.empty()) {
-      return {static_cast<float>(text.length()) * 8.0f * (reqSize / 16.0f), reqSize};
+      float curX = 0.0f, maxX = 0.0f, totalH = reqSize;
+      for (char c : text) {
+        if (c == '\n') {
+          if (curX > maxX) maxX = curX;
+          curX = 0.0f;
+          totalH += reqSize * 1.35f;
+        } else {
+          curX += 8.0f * (reqSize / 16.0f);
+        }
+      }
+      if (curX > maxX) maxX = curX;
+      return {maxX, totalH};
     }
 
     const SizeRange &range = getClosestRange(reqSize);
     float scale = reqSize / range.fontSize;
 
     float curX = 0.0f;
-    float curY = 0.0f;
+    float maxX = 0.0f;
+    float totalH = reqSize;
 
     for (char c : text) {
+      if (c == '\n') {
+        if (curX > maxX) maxX = curX;
+        curX = 0.0f;
+        totalH += reqSize * 1.35f;
+        continue;
+      }
       if (c >= 32 && c < 128) {
         stbtt_aligned_quad q;
+        float dummyY = 0.0f;
         stbtt_GetPackedQuad(range.charData, m_atlasWidth, m_atlasHeight, c - 32,
-                            &curX, &curY, &q, 0);
+                            &curX, &dummyY, &q, 0);
       } else if (c == ' ') {
         curX += (range.fontSize * 0.28f);
       }
     }
-
-    return {curX * scale, reqSize};
+    if (curX > maxX) maxX = curX;
+    return {maxX * scale, totalH};
   }
 
-  // Renders text string to screen with subpixel oversampled precision.
+  // Renders text string (including multi-line '\n') to screen with subpixel precision.
   void drawText(SDL_Renderer *renderer, const std::string &text,
                 const Vector2 &position, const Color &color,
                 float customFontSize = 0.0f) const {
@@ -247,6 +266,11 @@ public:
       float curY = position.y + (reqSize * 0.82f); // baseline
 
       for (char c : text) {
+        if (c == '\n') {
+          curX = position.x;
+          curY += (reqSize * 1.35f);
+          continue;
+        }
         if (c >= 32 && c < 128) {
           stbtt_aligned_quad q;
           float prevX = curX, prevY = curY;
@@ -272,6 +296,7 @@ public:
       drawFallbackBitmapText(renderer, text, position, color, reqSize / 16.0f);
     }
   }
+
 
   // Global default font: loads platform system or asset TrueType font
   static std::shared_ptr<Font> getDefaultFont() {
@@ -443,8 +468,14 @@ private:
     float pixelW = std::max(1.0f, scale);
     float pixelH = std::max(1.0f, scale);
     float curX = pos.x;
+    float curY = pos.y;
 
     for (char c : text) {
+      if (c == '\n') {
+        curX = pos.x;
+        curY += (10.0f * pixelH);
+        continue;
+      }
       if (c >= 32 && c <= 122) {
         int glyphIdx = c - 32;
         const uint8_t *cols = font5x7[glyphIdx];
@@ -453,7 +484,7 @@ private:
           uint8_t line = cols[col];
           for (int row = 0; row < 7; ++row) {
             if (line & (1 << row)) {
-              SDL_FRect pixelRect{curX + col * pixelW, pos.y + row * pixelH,
+              SDL_FRect pixelRect{curX + col * pixelW, curY + row * pixelH,
                                   pixelW, pixelH};
               SDL_RenderFillRect(renderer, &pixelRect);
             }
@@ -465,6 +496,7 @@ private:
       }
     }
   }
+
 
   SDL_Texture *m_texture = nullptr;
   int m_atlasWidth = 0;

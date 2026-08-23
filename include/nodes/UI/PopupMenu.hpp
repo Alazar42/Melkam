@@ -226,41 +226,42 @@ private:
     }
   }
 
+  int getItemAt(const Vector2 &mousePos) const {
+    if (!m_menuRect.hasPoint(mousePos)) return -1;
+    float relY = mousePos.y - (m_menuRect.position.y + 4.0f);
+    float accumY = 0.0f;
+    for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+      float h = items[i].separator ? 8.0f : itemHeight;
+      if (relY >= accumY && relY < accumY + h) {
+        if (!items[i].separator && !items[i].disabled) {
+          return i;
+        }
+        return -1;
+      }
+      accumY += h;
+    }
+    return -1;
+  }
+
   bool handleOverlayInput(const InputEvent &event) {
     if (!m_isOpen) return false;
 
     Vector2 mousePos = Input::getMousePosition();
 
     if (event.type == InputEventType::MouseMotion) {
-      if (m_menuRect.hasPoint(mousePos)) {
-        float relY = mousePos.y - (m_menuRect.position.y + 4.0f);
-        float accumY = 0.0f;
-        m_hoveredItem = -1;
-        for (int i = 0; i < static_cast<int>(items.size()); ++i) {
-          float h = items[i].separator ? 8.0f : itemHeight;
-          if (relY >= accumY && relY < accumY + h) {
-            if (!items[i].separator && !items[i].disabled) {
-              m_hoveredItem = i;
-            }
-            break;
-          }
-          accumY += h;
-        }
-      } else {
-        m_hoveredItem = -1;
-      }
+      m_hoveredItem = getItemAt(mousePos);
       return true;
     }
 
     if (event.type == InputEventType::MouseButton && event.isPressed()) {
       if (m_menuRect.hasPoint(mousePos)) {
-        if (m_hoveredItem >= 0 && m_hoveredItem < static_cast<int>(items.size())) {
-          auto &it = items[m_hoveredItem];
+        int idx = getItemAt(mousePos);
+        if (idx >= 0 && idx < static_cast<int>(items.size())) {
+          auto &it = items[idx];
           if (!it.disabled && !it.separator) {
             if (it.checkable) {
               it.checked = !it.checked;
             }
-            int idx = m_hoveredItem;
             int id = it.id;
             hideMenu();
             index_pressed.emit(idx);
@@ -268,10 +269,16 @@ private:
             return true;
           }
         }
+        return true;
       } else {
         hideMenu();
         return true;
       }
+    }
+
+    if (event.type == InputEventType::Key && event.isPressed() && event.key == Key::Escape) {
+      hideMenu();
+      return true;
     }
 
     return false;
@@ -281,3 +288,4 @@ private:
   Rect2 m_menuRect;
   int m_hoveredItem = -1;
 };
+

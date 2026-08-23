@@ -1,7 +1,38 @@
 #include "MelkamEngine.hpp"
+#include <iostream>
+#include <memory>
+#include <string>
 
-// 1. Controllable Player Character (CharacterBody2D with CollisionShape2D,
-// Cute Smiley Sprite & Camera2D)
+// =============================================================================
+// 1. SCENE DECLARATIONS
+// =============================================================================
+
+class MainMenuScene : public Control {
+public:
+  MainMenuScene() : Control("MainMenuScene") {}
+  void onReady() override;
+};
+
+class GameScene : public Node {
+public:
+  GameScene() : Node("GameScene") {}
+  void onReady() override;
+};
+
+class UISimulationScene : public Control {
+public:
+  UISimulationScene() : Control("UISimulationScene") {}
+  void onReady() override;
+};
+
+// =============================================================================
+// 2. GAMEPLAY ENTITIES (Player, Coins, Physics)
+// =============================================================================
+
+static int g_coinsCollected = 0;
+static Ref<Label> g_coinLabel = nullptr;
+static Ref<ProgressBar> g_progressBar = nullptr;
+
 class PlayerNode : public CharacterBody2D {
 public:
   float speed = 350.0f;
@@ -10,43 +41,34 @@ public:
   Ref<Camera2D> camera = nullptr;
 
   void onReady() override {
-    // 1. Attach CollisionShape2D child using addChild
-    auto colShape = addChild<CollisionShape2D>(Vector2(48.0f, 48.0f));
+    // 1. Collision shape
+    addChild<CollisionShape2D>(Vector2(48.0f, 48.0f));
 
-    // 2. Attach Cute Smiley Box Sprite2D
+    // 2. Player Sprite
     auto sprite = addChild<Sprite2D>("assets/sprites/player_smiley.png");
     sprite->size = {48.0f, 48.0f};
 
-    // 3. Attach Camera2D child and make it current to follow player
+    // 3. Camera2D Follow
     camera = addChild<Camera2D>();
     camera->makeCurrent();
   }
 
   void onPhysicsProcess(float delta) override {
-    // 1. Apply Gravity if in the air
     if (!isOnFloor()) {
       velocity.y += gravity * delta;
-    } else {
-      if (velocity.y > 0.0f) {
-        velocity.y = 0.0f;
-      }
+    } else if (velocity.y > 0.0f) {
+      velocity.y = 0.0f;
     }
 
-    // 2. Handle Jump (Space or W)
-    if ((Input::isKeyJustPressed(Key::Space) ||
-         Input::isKeyJustPressed(Key::W)) &&
-        isOnFloor()) {
+    if ((Input::isKeyJustPressed(Key::Space) || Input::isKeyJustPressed(Key::W)) && isOnFloor()) {
       jump();
     }
 
-    // 3. Horizontal Movement (A / D)
     float horizontal = Input::getAxis(Key::A, Key::D);
     velocity.x = horizontal * speed;
 
-    // 4. Move and Slide with Box2D physics & collision resolution
     moveAndSlide();
 
-    // Fall reset if falling off screen
     if (getPosition().y > 900.0f) {
       setPosition({300.0f, 300.0f});
       velocity = {0.0f, 0.0f};
@@ -59,40 +81,27 @@ public:
   }
 };
 
-// Global HUD references
-static int g_coinsCollected = 0;
-static Ref<Label> g_coinLabel = nullptr;
-static Ref<ProgressBar> g_progressBar = nullptr;
-
-// 2. Collectible Coin Trigger (Area2D with Godot body_entered Signal & Shiny
-// Coin Sprite)
 class CoinNode : public Area2D {
 public:
   void onReady() override {
-    // 1. Circle collision shape child
     auto colShape = addChild<CollisionShape2D>(18.0f);
-
-    // 2. Attach Coin Sprite2D
     auto sprite = colShape->addChild<Sprite2D>("assets/sprites/coin.png");
     sprite->size = {36.0f, 36.0f};
 
-    // 3. Connect to Godot-style Signal body_entered
     body_entered.connect([this](Node2D *body) {
       if (body && body->name == "Player") {
         g_coinsCollected++;
-        std::cout << "=== [SIGNAL FIRED] Coin collected! Total: "
-                  << g_coinsCollected << " ===" << std::endl;
+        std::cout << "=== [SIGNAL FIRED] Coin collected! Total: " << g_coinsCollected << " ===" << std::endl;
 
         if (g_coinLabel) {
-          g_coinLabel->text =
-              "Coins Collected: " + std::to_string(g_coinsCollected) + " / 3";
+          g_coinLabel->text = "Coins Collected: " + std::to_string(g_coinsCollected) + " / 3";
         }
         if (g_progressBar) {
           g_progressBar->setValue(g_coinsCollected * (100.0f / 3.0f));
         }
 
-        visible = false;    // Coin collected!
-        monitoring = false; // Stop monitoring
+        visible = false;
+        monitoring = false;
       }
     });
   }
@@ -104,167 +113,213 @@ public:
   }
 };
 
-int main() {
-  // 1. Create Application with Godot Stretch Mode (CanvasItems) & Aspect (Keep
-  // / Letterbox)
-  Application app("MelkamEngine - Godot 2D/3D Canvas UI & HUD Sandbox", 1280,
-                  720, true, StretchMode::CanvasItems, StretchAspect::Keep);
+// =============================================================================
+// 3. MAIN MENU SCENE IMPLEMENTATION
+// =============================================================================
 
-  // 2. Ground Platform (StaticBody2D with Floating Grass Platform Sprite)
-  auto ground = app.addChild<StaticBody2D>("Ground");
-  ground->setPosition({640.0f, 680.0f});
-  auto groundShape =
-      ground->addChild<CollisionShape2D>(Vector2(2560.0f, 50.0f));
-  auto groundSprite =
-      groundShape->addChild<Sprite2D>("assets/sprites/grass_platform.png");
-  groundSprite->size = {2560.0f, 50.0f};
+void MainMenuScene::onReady() {
+  Vector2 vp = Window::getViewportSize();
+  setSize(vp);
 
-  // Floating Grass Platforms
-  auto plat1 = app.addChild<StaticBody2D>("Platform1");
-  plat1->setPosition({350.0f, 500.0f});
-  auto plat1Shape = plat1->addChild<CollisionShape2D>(Vector2(260.0f, 40.0f));
-  auto plat1Sprite =
-      plat1->addChild<Sprite2D>("assets/sprites/grass_platform.png");
-  plat1Sprite->size = {260.0f, 40.0f};
+  // Background Gradient / Backdrop
+  auto bg = addChild<ColorRect>(Color::from_rgba8(16, 18, 26));
+  bg->setSize(vp);
 
-  auto plat2 = app.addChild<StaticBody2D>("Platform2");
-  plat2->setPosition({850.0f, 380.0f});
-  auto plat2Shape = plat2->addChild<CollisionShape2D>(Vector2(260.0f, 40.0f));
-  auto plat2Sprite =
-      plat2->addChild<Sprite2D>("assets/sprites/grass_platform.png");
-  plat2Sprite->size = {260.0f, 40.0f};
+  // Center Container for Menu Card
+  auto center = addChild<CenterContainer>();
+  center->setSize(vp);
 
-  auto plat3 = app.addChild<StaticBody2D>("Platform3");
-  plat3->setPosition({1400.0f, 480.0f});
-  auto plat3Shape = plat3->addChild<CollisionShape2D>(Vector2(260.0f, 40.0f));
-  auto plat3Sprite =
-      plat3->addChild<Sprite2D>("assets/sprites/grass_platform.png");
-  plat3Sprite->size = {260.0f, 40.0f};
+  // Main Menu Panel Card
+  auto card = center->addChild<Panel>();
+  card->customMinimumSize = {460.0f, 480.0f};
+  card->backgroundColor = Color::from_rgba8(25, 29, 42, 245);
+  card->borderColor = Color::from_rgba8(65, 80, 120);
+  card->borderWidth = 1.5f;
+  card->cornerRadius = 10.0f;
 
-  // 3. Collectible Coins (Area2D with Signal connection)
-  auto coin1 = app.addChild<CoinNode>();
-  coin1->setPosition({350.0f, 440.0f});
+  // Card Layout Container
+  auto vbox = card->addChild<VBoxContainer>(14.0f);
+  vbox->setPosition({30.0f, 28.0f});
+  vbox->setSize({400.0f, 420.0f});
 
-  auto coin2 = app.addChild<CoinNode>();
-  coin2->setPosition({850.0f, 320.0f});
+  // Engine Title
+  auto titleLabel = vbox->addChild<Label>("MELKAM ENGINE", 28.0f, Color::GOLD);
+  titleLabel->horizontalAlignment = HorizontalAlignment::Center;
 
-  auto coin3 = app.addChild<CoinNode>();
-  coin3->setPosition({1400.0f, 420.0f});
+  auto subLabel = vbox->addChild<Label>("Godot-Inspired 2D/3D Game Engine in C++", 14.0f, Color::from_rgba8(140, 160, 200));
+  subLabel->horizontalAlignment = HorizontalAlignment::Center;
 
-  // 4. Dynamic Crates (RigidBody2D with Godot defaults: friction 1.0, bounce
-  // 0.0)
-  auto crate1 = app.addChild<RigidBody2D>("Crate1");
-  crate1->lockRotation = true;
-  crate1->setPosition({400.0f, 150.0f});
-  auto crate1Shape = crate1->addChild<CollisionShape2D>(Vector2(45.0f, 45.0f));
-  crate1Shape->addChild<MeshInstance2D>(Vector2(45.0f, 45.0f),
-                                        Color::from_rgba8(205, 133, 63));
+  vbox->addChild<HSeparator>();
 
-  auto crate2 = app.addChild<RigidBody2D>("Crate2");
-  crate2->lockRotation = true;
-  crate2->setPosition({820.0f, 100.0f});
-  auto crate2Shape = crate2->addChild<CollisionShape2D>(Vector2(40.0f, 40.0f));
-  crate2Shape->addChild<MeshInstance2D>(Vector2(40.0f, 40.0f),
-                                        Color::from_rgba8(220, 160, 80));
+  // 1. Play Button
+  auto playBtn = vbox->addChild<Button>("▶  Play Platformer Game");
+  playBtn->customMinimumSize = {400.0f, 46.0f};
+  playBtn->fontSize = 17.0f;
+  playBtn->pressed.connect([this]() {
+    std::cout << "=== Switching to Game Scene ===" << std::endl;
+    getTree()->changeScene(makeRef<GameScene>());
+  });
 
-  // 5. Player CharacterBody2D
-  auto player = app.addChild<PlayerNode>();
-  player->name = "Player";
-  player->setPosition({300.0f, 300.0f});
+  // 2. UI Simulation Button
+  auto uiBtn = vbox->addChild<Button>("⚙  UI Simulation & Showcase");
+  uiBtn->customMinimumSize = {400.0f, 46.0f};
+  uiBtn->fontSize = 17.0f;
+  uiBtn->pressed.connect([this]() {
+    std::cout << "=== Switching to UI Simulation Scene ===" << std::endl;
+    getTree()->changeScene(makeRef<UISimulationScene>());
+  });
 
-  // =========================================================================
-  // 6. Canvas UI / HUD Layer (9-Slice UI Textures & Subtree Theme Demo)
-  // =========================================================================
+  // 3. About Dialog & Button
+  auto aboutDialog = addChild<AcceptDialog>(
+      "MelkamEngine v1.0\n\n"
+      "• Scene Tree architecture with Node & CanvasItem hierarchy\n"
+      "• Complete Godot-standard Canvas UI suite & StyleBoxes\n"
+      "• Box2D 2D Physics Server & CharacterBody2D moveAndSlide\n"
+      "• Flexible Signal / Slot reactive event system\n"
+      "• Hardware-accelerated 2D Batching with SDL3",
+      "About MelkamEngine");
 
-  // Load UI Texture Assets
+  auto aboutBtn = vbox->addChild<Button>("ℹ  About MelkamEngine");
+  aboutBtn->customMinimumSize = {400.0f, 42.0f};
+  aboutBtn->fontSize = 15.0f;
+  aboutBtn->pressed.connect([aboutDialog]() {
+    if (aboutDialog) aboutDialog->popupCentered({480.0f, 260.0f});
+  });
+
+  // 4. Quit Button & Confirmation
+  auto quitDialog = addChild<ConfirmationDialog>("Are you sure you want to quit MelkamEngine?", "Confirm Quit");
+  quitDialog->confirmed.connect([this]() {
+    std::cout << "=== Quitting Application ===" << std::endl;
+    getTree()->quit();
+  });
+
+  auto quitBtn = vbox->addChild<Button>("✖  Quit");
+  quitBtn->customMinimumSize = {400.0f, 42.0f};
+  quitBtn->fontSize = 15.0f;
+  quitBtn->pressed.connect([quitDialog]() {
+    if (quitDialog) quitDialog->popupCentered({380.0f, 180.0f});
+  });
+
+  vbox->addChild<HSeparator>();
+
+  // Link Button
+  auto docLink = vbox->addChild<LinkButton>("Learn more on GitHub Documentation", "https://github.com/Alazar42/MelkamEngine");
+  docLink->fontColor = Color::from_rgba8(80, 160, 255);
+
+}
+
+// =============================================================================
+// 4. GAMEPLAY SCENE IMPLEMENTATION
+// =============================================================================
+
+void GameScene::onReady() {
+  g_coinsCollected = 0;
+
+  // Load Textures
   auto panelTex = makeRef<Texture2D>("assets/UI/panel_frame.png");
   auto coinTex = makeRef<Texture2D>("assets/UI/coin_icon.png");
   auto btnTex = makeRef<Texture2D>("assets/UI/button_frame.png");
 
-  // A. Create a Custom Futuristic Cyan HUD Theme for the HUD Panel Subtree
+  // Ground Platform
+  auto ground = addChild<StaticBody2D>("Ground");
+  ground->setPosition({640.0f, 680.0f});
+  auto groundShape = ground->addChild<CollisionShape2D>(Vector2(2560.0f, 50.0f));
+  auto groundSprite = groundShape->addChild<Sprite2D>("assets/sprites/grass_platform.png");
+  groundSprite->size = {2560.0f, 50.0f};
+
+  // Floating Platforms
+  auto plat1 = addChild<StaticBody2D>("Platform1");
+  plat1->setPosition({350.0f, 500.0f});
+  auto plat1Shape = plat1->addChild<CollisionShape2D>(Vector2(260.0f, 40.0f));
+  auto plat1Sprite = plat1Shape->addChild<Sprite2D>("assets/sprites/grass_platform.png");
+  plat1Sprite->size = {260.0f, 40.0f};
+
+  auto plat2 = addChild<StaticBody2D>("Platform2");
+  plat2->setPosition({850.0f, 380.0f});
+  auto plat2Shape = plat2->addChild<CollisionShape2D>(Vector2(260.0f, 40.0f));
+  auto plat2Sprite = plat2Shape->addChild<Sprite2D>("assets/sprites/grass_platform.png");
+  plat2Sprite->size = {260.0f, 40.0f};
+
+  auto plat3 = addChild<StaticBody2D>("Platform3");
+  plat3->setPosition({1400.0f, 480.0f});
+  auto plat3Shape = plat3->addChild<CollisionShape2D>(Vector2(260.0f, 40.0f));
+  auto plat3Sprite = plat3Shape->addChild<Sprite2D>("assets/sprites/grass_platform.png");
+  plat3Sprite->size = {260.0f, 40.0f};
+
+  // Collectible Coins
+  auto coin1 = addChild<CoinNode>();
+  coin1->setPosition({350.0f, 440.0f});
+
+  auto coin2 = addChild<CoinNode>();
+  coin2->setPosition({850.0f, 320.0f});
+
+  auto coin3 = addChild<CoinNode>();
+  coin3->setPosition({1400.0f, 420.0f});
+
+  // Dynamic Crates
+  auto crate1 = addChild<RigidBody2D>("Crate1");
+  crate1->lockRotation = true;
+  crate1->setPosition({400.0f, 150.0f});
+  auto crate1Shape = crate1->addChild<CollisionShape2D>(Vector2(45.0f, 45.0f));
+  crate1Shape->addChild<MeshInstance2D>(Vector2(45.0f, 45.0f), Color::from_rgba8(205, 133, 63));
+
+  auto crate2 = addChild<RigidBody2D>("Crate2");
+  crate2->lockRotation = true;
+  crate2->setPosition({820.0f, 100.0f});
+  auto crate2Shape = crate2->addChild<CollisionShape2D>(Vector2(40.0f, 40.0f));
+  crate2Shape->addChild<MeshInstance2D>(Vector2(40.0f, 40.0f), Color::from_rgba8(220, 160, 80));
+
+  // Player
+  auto player = addChild<PlayerNode>();
+  player->name = "Player";
+  player->setPosition({300.0f, 300.0f});
+
+  // HUD Theme
   auto hudTheme = makeRef<Theme>();
   hudTheme->setColor("font_color", "Label", Color::from_rgba8(130, 230, 255));
   hudTheme->setFontSize("font_size", "Label", 16);
-
-  hudTheme->setColor("fill_color", "ProgressBar",
-                     Color::from_rgba8(0, 230, 160));
+  hudTheme->setColor("fill_color", "ProgressBar", Color::from_rgba8(0, 230, 160));
   hudTheme->setColor("bg_color", "ProgressBar", Color::from_rgba8(12, 22, 35));
-  hudTheme->setColor("border_color", "ProgressBar",
-                     Color::from_rgba8(35, 110, 175));
-  hudTheme->setColor("font_color", "ProgressBar", Color::WHITE);
-  hudTheme->setConstant("corner_radius", "ProgressBar", 4);
+  hudTheme->setColor("border_color", "ProgressBar", Color::from_rgba8(35, 110, 175));
 
-  // Top MenuBar
-  auto menuBar = app.addChild<MenuBar>();
-  menuBar->setPosition({0.0f, 0.0f});
-  menuBar->setSize({1280.0f, 28.0f});
-
-  // Modal Dialogs
-  auto aboutDialog = app.addChild<AcceptDialog>("MelkamEngine v1.0\nA modern Godot-inspired C++ Game Engine!", "About MelkamEngine");
-  auto restartDialog = app.addChild<ConfirmationDialog>("Do you want to reset collected coins and player position?", "Restart Level");
-
-  restartDialog->confirmed.connect([player]() {
-    g_coinsCollected = 0;
-    if (g_coinLabel) g_coinLabel->text = "Coins Collected: 0 / 3";
-    if (g_progressBar) g_progressBar->setValue(0.0f);
-    if (player) {
-      player->setPosition({300.0f, 300.0f});
-      player->velocity = {0.0f, 0.0f};
-    }
-    std::cout << "=== Level Restarted! ===" << std::endl;
+  // Top Navigation / Back Button
+  auto backBtn = addChild<Button>("⮌ Back to Menu");
+  backBtn->setPosition({24.0f, 16.0f});
+  backBtn->setSize({150.0f, 34.0f});
+  backBtn->fontSize = 15.0f;
+  backBtn->pressed.connect([this]() {
+    getTree()->changeScene(makeRef<MainMenuScene>());
   });
 
-  auto fileMenu = makeRef<PopupMenu>();
-  fileMenu->addItem("Restart Level", 1);
-  fileMenu->addSeparator();
-  fileMenu->addItem("Quit", 2);
-  fileMenu->id_pressed.connect([restartDialog](int id) {
-    if (id == 1 && restartDialog) restartDialog->popupCentered({380.0f, 180.0f});
-    else if (id == 2) std::exit(0);
-  });
-  menuBar->addMenu("File", fileMenu);
-
-  auto helpMenu = makeRef<PopupMenu>();
-  helpMenu->addItem("About MelkamEngine", 1);
-  helpMenu->id_pressed.connect([aboutDialog](int id) {
-    if (id == 1 && aboutDialog) aboutDialog->popupCentered({400.0f, 200.0f});
-  });
-  menuBar->addMenu("Help", helpMenu);
-
-  // Top-Left HUD Card Panel (Uses 9-Slice Textured Panel Frame + Custom Theme)
-  auto hudPanel = app.addChild<Panel>();
-  hudPanel->setPosition({24.0f, 40.0f});
+  // HUD Card Panel
+  auto hudPanel = addChild<Panel>();
+  hudPanel->setPosition({24.0f, 60.0f});
   hudPanel->setSize({320.0f, 136.0f});
   hudPanel->texture = panelTex;
   hudPanel->patchMarginLeft = 20.0f;
   hudPanel->patchMarginTop = 20.0f;
   hudPanel->patchMarginRight = 20.0f;
   hudPanel->patchMarginBottom = 20.0f;
-  hudPanel->theme = hudTheme; // Subtree theme inheritance!
+  hudPanel->theme = hudTheme;
 
-  auto titleLabel = hudPanel->addChild<Label>("MELKAM ENGINE HUD", 18.0f,
-                                              Color::from_rgba8(255, 215, 0));
+  auto titleLabel = hudPanel->addChild<Label>("MELKAM ENGINE HUD", 18.0f, Color::from_rgba8(255, 215, 0));
   titleLabel->setPosition({20.0f, 16.0f});
 
-  // Coin Icon & Counter
   auto coinIcon = hudPanel->addChild<TextureRect>(coinTex);
   coinIcon->setPosition({20.0f, 46.0f});
   coinIcon->setSize({24.0f, 24.0f});
 
-  g_coinLabel = hudPanel->addChild<Label>(
-      "Coins Collected: 0 / 3"); // Inherits cyan text from hudTheme
+  g_coinLabel = hudPanel->addChild<Label>("Coins Collected: 0 / 3");
   g_coinLabel->setPosition({52.0f, 48.0f});
 
-  g_progressBar =
-      hudPanel
-          ->addChild<ProgressBar>(); // Inherits neon emerald fill & cyan border
+  g_progressBar = hudPanel->addChild<ProgressBar>();
   g_progressBar->setPosition({20.0f, 86.0f});
   g_progressBar->setSize({278.0f, 24.0f});
   g_progressBar->setValue(0.0f);
 
-  // B. Top-Right Game Controls Panel (Uses 9-slice panel texture + global theme)
-  auto controlsPanel = app.addChild<Panel>();
-  controlsPanel->setPosition({924.0f, 40.0f});
+  // Right Controls Panel
+  auto controlsPanel = addChild<Panel>();
+  controlsPanel->setPosition({924.0f, 16.0f});
   controlsPanel->setSize({332.0f, 280.0f});
   controlsPanel->texture = panelTex;
   controlsPanel->patchMarginLeft = 20.0f;
@@ -272,11 +327,9 @@ int main() {
   controlsPanel->patchMarginRight = 20.0f;
   controlsPanel->patchMarginBottom = 20.0f;
 
-  auto controlsTitle =
-      controlsPanel->addChild<Label>("GAME CONTROLS", 18.0f, Color::GOLD);
+  auto controlsTitle = controlsPanel->addChild<Label>("GAME CONTROLS", 18.0f, Color::GOLD);
   controlsTitle->setPosition({20.0f, 14.0f});
 
-  // 1. Move Speed Slider (HSlider)
   auto speedLabel = controlsPanel->addChild<Label>("Speed: 350", 16.0f);
   speedLabel->setPosition({20.0f, 42.0f});
 
@@ -287,13 +340,10 @@ int main() {
   speedSlider->setMaxValue(800.0f);
   speedSlider->setValue(350.0f);
   speedSlider->value_changed.connect([player, speedLabel](float newSpeed) {
-    if (player)
-      player->speed = newSpeed;
-    if (speedLabel)
-      speedLabel->text = "Speed: " + std::to_string(static_cast<int>(newSpeed));
+    if (player) player->speed = newSpeed;
+    if (speedLabel) speedLabel->text = "Speed: " + std::to_string(static_cast<int>(newSpeed));
   });
 
-  // 2. Jump Power Selector (OptionButton)
   auto jumpOption = controlsPanel->addChild<OptionButton>();
   jumpOption->setPosition({20.0f, 96.0f});
   jumpOption->setSize({290.0f, 32.0f});
@@ -302,19 +352,12 @@ int main() {
   jumpOption->addItem("Super Jump (-950)");
   jumpOption->addItem("Mega Jump (-1150)");
   jumpOption->item_selected.connect([player](int idx) {
-    if (!player)
-      return;
-    if (idx == 0)
-      player->jumpVelocity = -750.0f;
-    else if (idx == 1)
-      player->jumpVelocity = -950.0f;
-    else if (idx == 2)
-      player->jumpVelocity = -1150.0f;
-    std::cout << "=== [OPTION SELECTED] Jump Velocity updated to "
-              << player->jumpVelocity << " ===" << std::endl;
+    if (!player) return;
+    if (idx == 0) player->jumpVelocity = -750.0f;
+    else if (idx == 1) player->jumpVelocity = -950.0f;
+    else if (idx == 2) player->jumpVelocity = -1150.0f;
   });
 
-  // 3. Camera Zoom Slider (HSlider)
   auto zoomLabel = controlsPanel->addChild<Label>("Camera Zoom: 1.0x", 16.0f);
   zoomLabel->setPosition({20.0f, 136.0f});
 
@@ -325,8 +368,7 @@ int main() {
   zoomSlider->setMaxValue(2.0f);
   zoomSlider->setValue(1.0f);
   zoomSlider->value_changed.connect([player, zoomLabel](float newZoom) {
-    if (player && player->camera)
-      player->camera->setZoom(newZoom);
+    if (player && player->camera) player->camera->setZoom(newZoom);
     if (zoomLabel) {
       char buf[32];
       snprintf(buf, sizeof(buf), "Camera Zoom: %.1fx", newZoom);
@@ -334,7 +376,6 @@ int main() {
     }
   });
 
-  // 4. Jump Push Button with Icon & Textured Skin (Button)
   auto jumpBtn = controlsPanel->addChild<Button>("Jump Action");
   jumpBtn->setPosition({20.0f, 192.0f});
   jumpBtn->setSize({290.0f, 40.0f});
@@ -348,14 +389,296 @@ int main() {
   jumpBtn->patchMarginBottom = 12.0f;
 
   jumpBtn->pressed.connect([player]() {
-    std::cout << "=== [UI BUTTON CLICKED] Jump Action Triggered! ==="
-              << std::endl;
     if (player && player->isOnFloor()) {
       player->jump();
     }
   });
+}
 
-  // 7. Run the Game
+// =============================================================================
+// 5. UI SIMULATION & COMPREHENSIVE SHOWCASE IMPLEMENTATION
+// =============================================================================
+
+void UISimulationScene::onReady() {
+  Vector2 vp = Window::getViewportSize();
+  setSize(vp);
+
+  // Background
+  auto bg = addChild<ColorRect>(Color::from_rgba8(18, 20, 30));
+  bg->setSize(vp);
+
+  // Top Navigation Bar
+  auto topNav = addChild<Panel>();
+  topNav->setPosition({0.0f, 0.0f});
+  topNav->setSize({vp.x, 48.0f});
+  topNav->backgroundColor = Color::from_rgba8(28, 32, 48);
+  topNav->borderColor = Color::from_rgba8(60, 70, 95);
+  topNav->borderWidth = 1.0f;
+
+  auto backBtn = topNav->addChild<Button>("⮌ Back to Main Menu");
+  backBtn->setPosition({16.0f, 8.0f});
+  backBtn->setSize({170.0f, 32.0f});
+  backBtn->fontSize = 15.0f;
+  backBtn->pressed.connect([this]() {
+    getTree()->changeScene(makeRef<MainMenuScene>());
+  });
+
+  auto navTitle = topNav->addChild<Label>("CANVAS UI SIMULATION & COMPREHENSIVE SHOWCASE", 17.0f, Color::GOLD);
+  navTitle->setPosition({210.0f, 14.0f});
+
+  // Tab Container for all UI categories
+  auto tabs = addChild<TabContainer>();
+  tabs->setPosition({16.0f, 60.0f});
+  tabs->setSize({vp.x - 32.0f, vp.y - 76.0f});
+
+  // ---------------------------------------------------------------------------
+  // Tab 1: Buttons & Inputs
+  // ---------------------------------------------------------------------------
+  auto tab1 = tabs->addTab("Buttons & Inputs");
+  auto vbox1 = tab1->addChild<VBoxContainer>(12.0f);
+  vbox1->setPosition({20.0f, 20.0f});
+  vbox1->setSize({tabs->getSize().x - 40.0f, tabs->getSize().y - 40.0f});
+
+  vbox1->addChild<Label>("Interactive Buttons & Selectors", 18.0f, Color::from_rgba8(130, 230, 255));
+
+  auto hbox1 = vbox1->addChild<HBoxContainer>(16.0f);
+
+  auto btnStandard = hbox1->addChild<Button>("Standard Button");
+  btnStandard->customMinimumSize = {180.0f, 38.0f};
+
+  auto btnFlat = hbox1->addChild<Button>("Flat Button");
+  btnFlat->flat = true;
+  btnFlat->customMinimumSize = {140.0f, 38.0f};
+
+  auto linkBtn = hbox1->addChild<LinkButton>("Hyperlink Button", "https://github.com/Alazar42/MelkamEngine");
+  linkBtn->fontColor = Color::from_rgba8(90, 180, 255);
+
+  vbox1->addChild<HSeparator>();
+  vbox1->addChild<Label>("Dropdown Selectors & Popup Menus", 16.0f, Color::WHITE);
+
+  auto hboxMenu = vbox1->addChild<HBoxContainer>(16.0f);
+  auto menuBtn = hboxMenu->addChild<MenuButton>("Select Action ▼");
+  menuBtn->customMinimumSize = {180.0f, 36.0f};
+  auto popup = menuBtn->getPopup();
+  popup->addItem("New Game", 1);
+  popup->addItem("Save Game", 2);
+  popup->addSeparator();
+  popup->addItem("Engine Settings", 3);
+
+  auto popupStatus = hboxMenu->addChild<Label>("Menu Selection: (none)", 15.0f);
+  popup->id_pressed.connect([popupStatus](int id) {
+    if (!popupStatus) return;
+    if (id == 1) popupStatus->text = "Menu Selection: New Game (ID: 1)";
+    else if (id == 2) popupStatus->text = "Menu Selection: Save Game (ID: 2)";
+    else if (id == 3) popupStatus->text = "Menu Selection: Engine Settings (ID: 3)";
+  });
+
+  auto optBtn = hboxMenu->addChild<OptionButton>();
+  optBtn->customMinimumSize = {200.0f, 36.0f};
+  optBtn->addItem("Option A: Low Quality");
+  optBtn->addItem("Option B: Medium Quality");
+  optBtn->addItem("Option C: Ultra Quality");
+
+  vbox1->addChild<HSeparator>();
+  vbox1->addChild<Label>("Toggle Switches & Radio Button Groups", 16.0f, Color::WHITE);
+
+  auto hbox2 = vbox1->addChild<HBoxContainer>(20.0f);
+  auto toggleSwitch = hbox2->addChild<CheckButton>("Sound Effects");
+  toggleSwitch->customMinimumSize = {160.0f, 32.0f};
+  toggleSwitch->setButtonPressed(true);
+
+  auto btnGroup = makeRef<ButtonGroup>();
+  auto radio1 = hbox2->addChild<CheckBox>("Easy Mode");
+  radio1->setButtonGroup(btnGroup);
+  radio1->setButtonPressed(true);
+
+  auto radio2 = hbox2->addChild<CheckBox>("Normal Mode");
+  radio2->setButtonGroup(btnGroup);
+
+  auto radio3 = hbox2->addChild<CheckBox>("Hard Mode");
+  radio3->setButtonGroup(btnGroup);
+
+  vbox1->addChild<HSeparator>();
+  vbox1->addChild<Label>("Text Input Fields & Steppers", 16.0f, Color::WHITE);
+
+  auto hbox3 = vbox1->addChild<HBoxContainer>(16.0f);
+  auto lineEdit = hbox3->addChild<LineEdit>("PlayerOne");
+  lineEdit->placeholderText = "Enter character name...";
+  lineEdit->customMinimumSize = {260.0f, 36.0f};
+  lineEdit->clearButtonEnabled = true;
+
+  auto spinBox = hbox3->addChild<SpinBox>(1.0f, 100.0f, 25.0f, 1.0f);
+  spinBox->suffix = " HP";
+  spinBox->customMinimumSize = {160.0f, 36.0f};
+
+
+  // ---------------------------------------------------------------------------
+  // Tab 2: Text & BBCode Editor
+  // ---------------------------------------------------------------------------
+  auto tab2 = tabs->addTab("Text & BBCode");
+  auto vbox2 = tab2->addChild<VBoxContainer>(12.0f);
+  vbox2->setPosition({20.0f, 20.0f});
+  vbox2->setSize({tabs->getSize().x - 40.0f, tabs->getSize().y - 40.0f});
+
+  vbox2->addChild<Label>("RichTextLabel BBCode Parser Demonstration", 18.0f, Color::GOLD);
+
+  auto richLabel = vbox2->addChild<RichTextLabel>();
+  richLabel->customMinimumSize = {tabs->getSize().x - 40.0f, 90.0f};
+  richLabel->setBbcode(
+      "[b]Bold Heading[/b] with [i]Italic Accent[/i] and [u]Underlined Emphasis[/u].\n"
+      "Supports [color=#00e6a0]Emerald[/color], [color=#ff4060]Crimson[/color], [color=#ffd700]Golden Highlights[/color], "
+      "and [url=https://melkamengine.org]Interactive Clickable Links[/url]!");
+
+  vbox2->addChild<HSeparator>();
+  vbox2->addChild<Label>("TextEdit Multi-Line Source Code Editor", 18.0f, Color::from_rgba8(130, 230, 255));
+
+  auto textEdit = vbox2->addChild<TextEdit>();
+  textEdit->customMinimumSize = {tabs->getSize().x - 40.0f, 180.0f};
+  textEdit->setText(
+      "// MelkamEngine C++ Example Script\n"
+      "#include \"MelkamEngine.hpp\"\n\n"
+      "void setupScene(SceneTree* tree) {\n"
+      "    auto player = tree->getRoot()->addChild<PlayerNode>();\n"
+      "    player->speed = 400.0f;\n"
+      "    std::cout << \"Player spawned!\" << std::endl;\n"
+      "}");
+
+  // ---------------------------------------------------------------------------
+  // Tab 3: Sliders & Progress
+  // ---------------------------------------------------------------------------
+  auto tab3 = tabs->addTab("Sliders & Meters");
+  auto vbox3 = tab3->addChild<VBoxContainer>(14.0f);
+  vbox3->setPosition({20.0f, 20.0f});
+  vbox3->setSize({tabs->getSize().x - 40.0f, tabs->getSize().y - 40.0f});
+
+  vbox3->addChild<Label>("Progress Indicators & Range Meters", 18.0f, Color::GOLD);
+
+  auto progBarH = vbox3->addChild<ProgressBar>();
+  progBarH->customMinimumSize = {420.0f, 26.0f};
+  progBarH->setValue(65.0f);
+
+  auto sliderValLabel = vbox3->addChild<Label>("Interactive Slider Value: 65%", 16.0f);
+
+  auto hSlider = vbox3->addChild<HSlider>();
+  hSlider->customMinimumSize = {420.0f, 24.0f};
+  hSlider->setMinValue(0.0f);
+  hSlider->setMaxValue(100.0f);
+  hSlider->setValue(65.0f);
+  hSlider->value_changed.connect([progBarH, sliderValLabel](float val) {
+    if (progBarH) progBarH->setValue(val);
+    if (sliderValLabel) sliderValLabel->text = "Interactive Slider Value: " + std::to_string(static_cast<int>(val)) + "%";
+  });
+
+  vbox3->addChild<HSeparator>();
+  vbox3->addChild<Label>("ScrollBars (Proportional Thumbs)", 16.0f, Color::WHITE);
+
+  auto hScrollBar = vbox3->addChild<HScrollBar>();
+  hScrollBar->customMinimumSize = {420.0f, 18.0f};
+  hScrollBar->setValue(30.0f);
+
+  // ---------------------------------------------------------------------------
+  // Tab 4: Containers & Layouts
+  // ---------------------------------------------------------------------------
+  auto tab4 = tabs->addTab("Containers & Layouts");
+  auto vbox4 = tab4->addChild<VBoxContainer>(12.0f);
+  vbox4->setPosition({20.0f, 20.0f});
+  vbox4->setSize({tabs->getSize().x - 40.0f, tabs->getSize().y - 40.0f});
+
+  vbox4->addChild<Label>("Draggable SplitContainer (Move divider to resize)", 17.0f, Color::GOLD);
+
+  auto split = vbox4->addChild<HSplitContainer>();
+  split->customMinimumSize = {tabs->getSize().x - 40.0f, 120.0f};
+  split->splitOffset = 280.0f;
+
+  auto leftPane = split->addChild<Panel>();
+  leftPane->backgroundColor = Color::from_rgba8(35, 45, 65);
+  auto leftLabel = leftPane->addChild<Label>("Left Panel (Resizable)");
+  leftLabel->setPosition({14.0f, 14.0f});
+
+  auto rightPane = split->addChild<Panel>();
+  rightPane->backgroundColor = Color::from_rgba8(45, 35, 55);
+  auto rightLabel = rightPane->addChild<Label>("Right Panel (Resizable)");
+  rightLabel->setPosition({14.0f, 14.0f});
+
+  vbox4->addChild<HSeparator>();
+  vbox4->addChild<Label>("FlowContainer (Dynamic Word-Wrap Tags)", 17.0f, Color::from_rgba8(130, 230, 255));
+
+  auto flow = vbox4->addChild<HFlowContainer>(10.0f, 10.0f);
+  flow->customMinimumSize = {tabs->getSize().x - 40.0f, 80.0f};
+
+  const char *tags[] = {"#GameDev", "#Cpp20", "#GodotParity", "#Box2D", "#Renderer2D", "#CanvasItem", "#SignalSlots", "#SceneTree"};
+  for (const char *tag : tags) {
+    auto chip = flow->addChild<Button>(tag);
+    chip->customMinimumSize = {120.0f, 32.0f};
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tab 5: Dialogs & Floating Windows
+  // ---------------------------------------------------------------------------
+  auto tab5 = tabs->addTab("Modals & Windows");
+  auto vbox5 = tab5->addChild<VBoxContainer>(14.0f);
+  vbox5->setPosition({20.0f, 20.0f});
+  vbox5->setSize({tabs->getSize().x - 40.0f, tabs->getSize().y - 40.0f});
+
+  vbox5->addChild<Label>("Modal Dialogs & Draggable UI Windows", 18.0f, Color::GOLD);
+
+  // Modal Alerts
+  auto demoAccept = addChild<AcceptDialog>("This is a modal AcceptDialog alert!\nClick OK to close.", "Alert Modal");
+  auto demoConfirm = addChild<ConfirmationDialog>("Do you want to proceed with this operation?", "Confirm Modal");
+
+  // Draggable Floating Window
+  auto floatingWin = addChild<UIWindow>("Floating Toolbox Window");
+  floatingWin->customMinimumSize = {320.0f, 200.0f};
+  auto winContent = floatingWin->addChild<VBoxContainer>(10.0f);
+  winContent->setPosition({16.0f, 44.0f});
+  winContent->setSize({288.0f, 140.0f});
+  winContent->addChild<Label>("Drag my title bar around!", 15.0f, Color::from_rgba8(130, 230, 255));
+  winContent->addChild<Button>("Toolbox Button 1");
+  winContent->addChild<Button>("Toolbox Button 2");
+
+  auto hbox5 = vbox5->addChild<HBoxContainer>(16.0f);
+
+  auto btnOpenAlert = hbox5->addChild<Button>("Open AcceptDialog");
+  btnOpenAlert->customMinimumSize = {180.0f, 40.0f};
+  btnOpenAlert->pressed.connect([demoAccept]() {
+    if (demoAccept) demoAccept->popupCentered({400.0f, 200.0f});
+  });
+
+  auto btnOpenConfirm = hbox5->addChild<Button>("Open ConfirmationDialog");
+  btnOpenConfirm->customMinimumSize = {200.0f, 40.0f};
+  btnOpenConfirm->pressed.connect([demoConfirm]() {
+    if (demoConfirm) demoConfirm->popupCentered({420.0f, 200.0f});
+  });
+
+  auto btnOpenWindow = hbox5->addChild<Button>("Open Floating Window");
+  btnOpenWindow->customMinimumSize = {180.0f, 40.0f};
+  btnOpenWindow->pressed.connect([floatingWin]() {
+    if (floatingWin) floatingWin->popupCentered({340.0f, 220.0f});
+  });
+
+  vbox5->addChild<HSeparator>();
+  auto statusLabel = vbox5->addChild<Label>("Click the buttons above to test modal dialogs and draggable floating windows.", 15.0f, Color::from_rgba8(160, 175, 205));
+
+  demoConfirm->confirmed.connect([statusLabel]() {
+    if (statusLabel) statusLabel->text = "Status: User CONFIRMED the dialog!";
+  });
+  demoConfirm->canceled.connect([statusLabel]() {
+    if (statusLabel) statusLabel->text = "Status: User CANCELED the dialog!";
+  });
+}
+
+// =============================================================================
+// 6. MAIN ENTRY POINT
+// =============================================================================
+
+int main() {
+  Application app("MelkamEngine - Godot-Style 2D Engine & Canvas UI Framework", 1280, 720, true,
+                  StretchMode::CanvasItems, StretchAspect::Keep);
+
+  // Set initial scene to Main Menu
+  app.getTree()->changeScene(makeRef<MainMenuScene>());
+
+  // Run Main Engine Loop
   app.run();
   return 0;
 }

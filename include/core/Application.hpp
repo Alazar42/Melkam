@@ -39,15 +39,22 @@ public:
     m_props.clearColor = clearColor;
     m_props.vsync = vsync;
     m_props.resizable = resizable;
+    s_instance = this;
     m_tree = std::make_shared<SceneTree>();
   }
 
   // Explicit WindowProps constructor
   explicit Application(const WindowProps &props) : m_props(props) {
+    s_instance = this;
     m_tree = std::make_shared<SceneTree>();
   }
 
-  virtual ~Application() = default;
+  virtual ~Application() {
+    if (s_instance == this) s_instance = nullptr;
+  }
+
+  static Application *getInstance() { return s_instance; }
+
 
   virtual void onInit() {}
   virtual void onUpdate(float) {}
@@ -241,7 +248,9 @@ public:
   std::shared_ptr<SceneTree> getTree() const { return m_tree; }
 
 private:
+  inline static Application *s_instance = nullptr;
   WindowProps m_props;
   std::unique_ptr<Window> m_window = nullptr;
   std::shared_ptr<SceneTree> m_tree = nullptr;
 };
+

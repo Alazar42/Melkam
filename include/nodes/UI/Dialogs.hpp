@@ -4,6 +4,7 @@
 #include "nodes/UI/Button.hpp"
 #include "nodes/UI/Label.hpp"
 #include "nodes/UI/UIWindow.hpp"
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -19,13 +20,31 @@ public:
   AcceptDialog() : UIWindow("AcceptDialog") {
     this->title = "Alert";
     this->exclusive = true;
-    this->customMinimumSize = Vector2(360.0f, 180.0f);
+    this->customMinimumSize = Vector2(380.0f, 180.0f);
   }
 
   explicit AcceptDialog(std::string message, std::string dialogTitle = "Alert")
       : UIWindow(std::move(dialogTitle)), dialogText(std::move(message)) {
     this->exclusive = true;
-    this->customMinimumSize = Vector2(360.0f, 180.0f);
+    this->customMinimumSize = Vector2(380.0f, 180.0f);
+  }
+
+  void popupCentered(const Vector2 &size = Vector2(0.0f, 0.0f)) {
+    Ref<Font> activeFont = this->font ? this->font : this->getThemeFont("font", "AcceptDialog");
+    const Font &f = activeFont ? *activeFont : *Font::getDefaultFont();
+    float activeSize = (this->fontSize > 0.0f) ? this->fontSize : static_cast<float>(this->getThemeFontSize("font_size", "AcceptDialog", 15));
+
+    Vector2 tSize = f.getStringSize(dialogText, activeSize);
+    float minW = std::max(420.0f, tSize.x + 48.0f);
+    float minH = std::max(180.0f, tSize.y + titleBarHeight + 70.0f);
+
+    Vector2 finalSize = size;
+    if (finalSize.x <= 0.0f) finalSize.x = minW;
+    if (finalSize.y <= 0.0f) finalSize.y = minH;
+    finalSize.x = std::max(finalSize.x, minW);
+    finalSize.y = std::max(finalSize.y, minH);
+
+    UIWindow::popupCentered(finalSize);
   }
 
   void drawControl() override {
@@ -40,10 +59,13 @@ public:
 
     // 1. Draw Dialog Message Text
     if (!dialogText.empty()) {
-      float textY = rect.position.y + titleBarHeight + 20.0f;
+      float textY = rect.position.y + titleBarHeight + 16.0f;
       float textX = rect.position.x + 20.0f;
       Renderer2D::drawText(dialogText, Vector2(textX, textY), this->fontColor, activeSize, activeFont);
     }
+
+    // 2. Draw OK Button
+    drawPostChildren();
   }
 
   void onGuiInput(const InputEvent &event) override {
@@ -144,9 +166,6 @@ public:
     float tx = cancelRect.position.x + (cancelRect.size.x - tSize.x) * 0.5f;
     float ty = cancelRect.position.y + (cancelRect.size.y - tSize.y) * 0.5f;
     Renderer2D::drawText(cancelButtonText, Vector2(tx, ty), Color::from_rgba8(200, 205, 220), 15.0f, activeFont);
-
-    // Draw OK Button
-    drawPostChildren();
   }
 
 protected:

@@ -43,6 +43,10 @@ public:
     visible = false;
   }
 
+  ~UIWindow() override {
+    hideWindow();
+  }
+
   void popupCentered(const Vector2 &size = Vector2(400.0f, 260.0f)) {
     Vector2 vp = Window::getViewportSize();
     float x = (vp.x - size.x) * 0.5f;
@@ -50,50 +54,109 @@ public:
     setPosition(Vector2(x, y));
     setSize(size);
     visible = true;
+    m_isOpen = true;
     grabFocus();
+
+    Control::setModalOverlay(
+        this,
+        [this]() { drawOverlay(); },
+        [this](const InputEvent &event) -> bool { return handleOverlayInput(event); });
   }
 
   void hideWindow() {
-    visible = false;
-    releaseFocus();
-    close_requested.emit();
+    if (visible || m_isOpen) {
+      visible = false;
+      m_isOpen = false;
+      m_isDragging = false;
+      Control::removeModalOverlay(this);
+      releaseFocus();
+      close_requested.emit();
+    }
   }
 
-  void onGuiInput(const InputEvent &event) override {
-    if (!visible) return;
+  void onDraw() override {
+    if (!m_isOpen && visible) {
+      drawControl();
+    }
+  }
+
+  virtual void drawOverlay() {
+    if (!visible && !m_isOpen) return;
+    drawControl();
+  }
+
+  virtual bool handleOverlayInput(const InputEvent &event) {
+    if (!visible && !m_isOpen) return false;
 
     Rect2 rect = getGlobalRect();
     Rect2 titleRect(rect.position.x, rect.position.y, rect.size.x, titleBarHeight);
     Rect2 closeRect(rect.position.x + rect.size.x - 28.0f, rect.position.y + 4.0f, 24.0f, 24.0f);
 
+    Vector2 mousePos = Input::getMousePosition();
+
     if (event.type == InputEventType::MouseButton && event.mouseButton == MouseButton::Left) {
       if (event.isPressed()) {
-        grabFocus();
-        if (closable && closeRect.hasPoint(event.mousePosition)) {
+        if (closable && closeRect.hasPoint(mousePos)) {
           hideWindow();
-          const_cast<InputEvent &>(event).setHandled();
-          return;
+          return true;
         }
 
-        if (draggable && titleRect.hasPoint(event.mousePosition)) {
+        if (draggable && titleRect.hasPoint(mousePos)) {
           m_isDragging = true;
-          m_dragMouseStart = event.mousePosition;
+          m_dragMouseStart = mousePos;
           m_dragWindowStart = getPosition();
-          const_cast<InputEvent &>(event).setHandled();
-          return;
+          return true;
+        }
+
+        if (rect.hasPoint(mousePos)) {
+          onGuiInput(event);
+          return true;
+        }
+
+        if (exclusive) {
+          return true;
         }
       } else {
-        m_isDragging = false;
+        if (m_isDragging) {
+          m_isDragging = false;
+          return true;
+        }
+        if (rect.hasPoint(mousePos) || exclusive) {
+          onGuiInput(event);
+          return true;
+        }
       }
-    } else if (event.type == InputEventType::MouseMotion && m_isDragging) {
-      Vector2 delta = event.mousePosition - m_dragMouseStart;
-      setPosition(m_dragWindowStart + delta);
-      const_cast<InputEvent &>(event).setHandled();
+    } else if (event.type == InputEventType::MouseMotion) {
+      if (m_isDragging) {
+        Vector2 delta = mousePos - m_dragMouseStart;
+        setPosition(m_dragWindowStart + delta);
+        return true;
+      }
+      if (rect.hasPoint(mousePos)) {
+        onGuiInput(event);
+        return true;
+      }
+      if (exclusive) {
+        return true;
+      }
+    } else if (event.type == InputEventType::Key && event.isPressed()) {
+      if (event.key == Key::Escape) {
+        hideWindow();
+        return true;
+      }
+      onGuiInput(event);
+      return exclusive;
     }
+
+    return exclusive;
+  }
+
+  void onGuiInput(const InputEvent &event) override {
+    (void)event;
   }
 
   void drawControl() override {
-    if (!visible) return;
+    if (!visible && !m_isOpen) return;
 
     Rect2 rect = getGlobalRect();
     Vector2 mousePos = Input::getMousePosition();
@@ -136,7 +199,8 @@ public:
     }
   }
 
-private:
+protected:
+  bool m_isOpen = false;
   bool m_isDragging = false;
   Vector2 m_dragMouseStart{0.0f, 0.0f};
   Vector2 m_dragWindowStart{0.0f, 0.0f};

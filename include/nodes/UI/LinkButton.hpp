@@ -4,6 +4,8 @@
 #include "nodes/UI/CheckBox.hpp"
 #include "renderers/Font.hpp"
 #include "renderers/Renderer2D.hpp"
+#include <SDL3/SDL.h>
+#include <algorithm>
 #include <string>
 
 enum class LinkUnderlineMode {
@@ -27,27 +29,49 @@ public:
 
   LinkButton() : BaseButton("LinkButton") {
     customMinimumSize = {80.0f, 24.0f};
+    pressed.connect([this]() {
+      if (!uri.empty()) {
+        SDL_OpenURL(uri.c_str());
+      }
+    });
   }
 
   explicit LinkButton(std::string buttonText, std::string targetUri = "")
       : BaseButton("LinkButton"), text(std::move(buttonText)), uri(std::move(targetUri)) {
     customMinimumSize = {80.0f, 24.0f};
+    pressed.connect([this]() {
+      if (!uri.empty()) {
+        SDL_OpenURL(uri.c_str());
+      }
+    });
+  }
+
+  void setText(std::string newText) {
+    text = std::move(newText);
   }
 
   void drawControl() override {
     if (text.empty()) return;
 
-    Rect2 rect = getGlobalRect();
     Ref<Font> activeFont = font ? font : getThemeFont("font", "LinkButton");
     const Font &f = activeFont ? *activeFont : *Font::getDefaultFont();
     float activeSize = (fontSize > 0.0f) ? fontSize : static_cast<float>(getThemeFontSize("font_size", "LinkButton", 16));
+
+    Vector2 textSize = f.getStringSize(text, activeSize);
+    if (customMinimumSize.x < textSize.x + 8.0f) {
+      customMinimumSize.x = textSize.x + 8.0f;
+    }
+    if (customMinimumSize.y < textSize.y + 4.0f) {
+      customMinimumSize.y = textSize.y + 4.0f;
+    }
+
+    Rect2 rect = getGlobalRect();
 
     Color activeColor = fontColor;
     if (disabled) activeColor = Color::from_rgba8(120, 120, 130);
     else if (m_isDown && m_isHovered) activeColor = pressedFontColor;
     else if (m_isHovered) activeColor = hoverFontColor;
 
-    Vector2 textSize = f.getStringSize(text, activeSize);
     float textX = rect.position.x;
     float textY = rect.position.y + (rect.size.y - textSize.y) * 0.5f;
 

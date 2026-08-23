@@ -59,6 +59,10 @@ public:
   Vector2 getViewportSize() const;
   Vector2 getViewportCenter() const;
 
+  // Returns active SceneTree (defined after SceneTree class)
+  SceneTree *getTree() const;
+
+
   virtual void onReady() {}
   virtual void onProcess(float) {}
   virtual void onPhysicsProcess(float) {}
@@ -134,7 +138,7 @@ public:
 
   // Recursively draws this node and all visible children.
   void drawTree() {
-    if (!visible) return;
+    if (!visible || !active) return;
     onDraw();
     for (auto &child : m_children) {
       if (child) {
@@ -143,27 +147,38 @@ public:
     }
   }
 
-  // Recursively propagates input events to this node and all active children.
+  // Recursively propagates input events to children in reverse order (front-to-back), then self.
   void inputTree(const InputEvent &event) {
-    if (!active) return;
-    onInput(event);
-    for (auto &child : m_children) {
-      if (child) {
-        child->inputTree(event);
+    if (!active || !visible) return;
+
+    for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
+      if (*it) {
+        (*it)->inputTree(event);
+        if (event.isHandled()) return;
       }
+    }
+
+    if (!event.isHandled()) {
+      onInput(event);
     }
   }
 
-  // Recursively propagates unhandled input events to this node and all active children.
+  // Recursively propagates unhandled input events to children in reverse order (front-to-back), then self.
   void unhandledInputTree(const InputEvent &event) {
-    if (!active) return;
-    onUnhandledInput(event);
-    for (auto &child : m_children) {
-      if (child) {
-        child->unhandledInputTree(event);
+    if (!active || !visible) return;
+
+    for (auto it = m_children.rbegin(); it != m_children.rend(); ++it) {
+      if (*it) {
+        (*it)->unhandledInputTree(event);
+        if (event.isHandled()) return;
       }
     }
+
+    if (!event.isHandled()) {
+      onUnhandledInput(event);
+    }
   }
+
 
   // Returns pointer to parent node (nullptr if root).
   Node *getParent() const { return m_parent; }

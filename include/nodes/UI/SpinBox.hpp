@@ -36,6 +36,18 @@ public:
     value = 0.0f;
   }
 
+  explicit SpinBox(float minVal, float maxVal = 100.0f, float initialVal = 0.0f, float stepVal = 1.0f)
+      : Range("SpinBox") {
+    customMinimumSize = {120.0f, 34.0f};
+    mouseFilter = MouseFilter::Stop;
+    focusMode = FocusMode::All;
+    minValue = minVal;
+    maxValue = maxVal;
+    step = stepVal;
+    value = initialVal;
+  }
+
+
   void onGuiInput(const InputEvent &event) override {
     if (!editable) return;
 

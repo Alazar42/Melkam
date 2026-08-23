@@ -136,24 +136,12 @@ public:
       m_cursorPos = getCursorPosFromMouse(event.mousePosition.x);
       m_selectionEnd = m_cursorPos;
       const_cast<InputEvent &>(event).setHandled();
-    }
-  }
-
-  void onInput(const InputEvent &event) override {
-    Control::onInput(event);
-
-    if (!hasFocus() || !editable) return;
-
-    if (event.type == InputEventType::MouseButton && event.isPressed()) {
-      if (!getGlobalRect().hasPoint(event.mousePosition)) {
-        releaseFocus();
-        deselect();
-      }
     } else if (event.type == InputEventType::Key && event.isPressed()) {
       handleKeyPress(event);
       const_cast<InputEvent &>(event).setHandled();
     }
   }
+
 
   void drawControl() override {
     Rect2 rect = getGlobalRect();

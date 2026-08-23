@@ -74,7 +74,13 @@ public:
     }
   }
 
+  void setButtonPressed(bool isPressed) {
+    setPressed(isPressed);
+  }
+
   bool isPressed() const { return buttonPressed; }
+  bool isButtonPressed() const { return buttonPressed; }
+
 
   void onGuiInput(const InputEvent &event) override {
     if (disabled) return;
