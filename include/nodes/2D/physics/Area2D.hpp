@@ -242,11 +242,13 @@ protected:
     b2WorldId worldId = PhysicsServer2D::getWorldId();
     if (!b2World_IsValid(worldId)) return;
 
+    Transform2D globalTrans = getGlobalTransform();
     b2BodyDef bodyDef = b2DefaultBodyDef();
     bodyDef.type = b2_staticBody;
-    bodyDef.position = PhysicsServer2D::toMeters(transform.position);
-    bodyDef.rotation = b2MakeRot(transform.rotation);
+    bodyDef.position = PhysicsServer2D::toMeters(globalTrans.position);
+    bodyDef.rotation = b2MakeRot(globalTrans.rotation);
     bodyDef.userData = this;
+
 
     m_bodyId = b2CreateBody(worldId, &bodyDef);
   }

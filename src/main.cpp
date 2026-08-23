@@ -39,6 +39,8 @@ public:
   float jumpVelocity = -750.0f;
   float gravity = 1400.0f;
   Ref<Camera2D> camera = nullptr;
+  Ref<PointLight2D> lanternLight = nullptr;
+  Ref<RayCast2D> floorRay = nullptr;
 
   void onReady() override {
     // 1. Collision shape
@@ -48,10 +50,19 @@ public:
     auto sprite = addChild<Sprite2D>("assets/sprites/player_smiley.png");
     sprite->size = {48.0f, 48.0f};
 
-    // 3. Camera2D Follow
+    // 3. Soft Atmospheric Lantern Light (PointLight2D)
+    lanternLight = addChild<PointLight2D>(150.0f, Color::from_rgba8(255, 230, 160, 160), 0.45f);
+    lanternLight->attenuation = 1.6f;
+
+    // 4. Ground Probe Sensor (RayCast2D)
+    floorRay = addChild<RayCast2D>(Vector2(0.0f, 50.0f));
+    floorRay->showDebug = true;
+
+    // 5. Camera2D Follow
     camera = addChild<Camera2D>();
     camera->makeCurrent();
   }
+
 
   void onPhysicsProcess(float delta) override {
     if (!isOnFloor()) {
@@ -246,15 +257,63 @@ void GameScene::onReady() {
   auto plat3Sprite = plat3Shape->addChild<Sprite2D>("assets/sprites/grass_platform.png");
   plat3Sprite->size = {260.0f, 40.0f};
 
-  // Collectible Coins
+  // 2D Spline Path with Moving Platform (Path2D + PathFollow2D)
+  auto movingPath = addChild<Path2D>();
+  movingPath->curve->addPoint({500.0f, 260.0f}, {0.0f, 0.0f}, {80.0f, -40.0f});
+  movingPath->curve->addPoint({750.0f, 210.0f}, {-60.0f, 30.0f}, {60.0f, 30.0f});
+  movingPath->curve->addPoint({1000.0f, 260.0f}, {-80.0f, -40.0f}, {0.0f, 0.0f});
+
+  auto moverFollow = movingPath->addChild<PathFollow2D>(140.0f, true); // Moves back and forth along curve (ping-pong)
+  moverFollow->rotates = false;
+  moverFollow->pingPong = true;
+  auto moverPlat = moverFollow->addChild<StaticBody2D>("MovingPlatform");
+
+  auto moverShape = moverPlat->addChild<CollisionShape2D>(Vector2(140.0f, 32.0f));
+  auto moverSprite = moverShape->addChild<Sprite2D>("assets/sprites/grass_platform.png");
+  moverSprite->size = {140.0f, 32.0f};
+
+  // Guide Polyline (Line2D)
+  auto guideLine = addChild<Line2D>();
+  guideLine->width = 3.0f;
+  guideLine->defaultColor = Color::from_rgba8(0, 230, 200, 140);
+  guideLine->addPoint({350.0f, 500.0f});
+  guideLine->addPoint({850.0f, 380.0f});
+  guideLine->addPoint({1400.0f, 480.0f});
+
+  // Spawn Point Marker (Marker2D)
+  auto spawnMarker = addChild<Marker2D>();
+  spawnMarker->setPosition({300.0f, 300.0f});
+
+  // Collectible Coins with PointLight2D & Particle Sparkles
   auto coin1 = addChild<CoinNode>();
   coin1->setPosition({350.0f, 440.0f});
+  auto coinLight1 = coin1->addChild<PointLight2D>(90.0f, Color::from_rgba8(255, 215, 0, 140), 0.45f);
+  auto sparkles1 = coin1->addChild<CPUParticles2D>(12);
+  sparkles1->color = Color::GOLD;
+  sparkles1->scaleMin = 2.0f;
+  sparkles1->scaleMax = 5.0f;
+  sparkles1->spreadDegrees = 360.0f;
+  sparkles1->gravity = {0.0f, -30.0f};
 
   auto coin2 = addChild<CoinNode>();
   coin2->setPosition({850.0f, 320.0f});
+  auto coinLight2 = coin2->addChild<PointLight2D>(90.0f, Color::from_rgba8(255, 215, 0, 140), 0.45f);
+  auto sparkles2 = coin2->addChild<CPUParticles2D>(12);
+  sparkles2->color = Color::GOLD;
+  sparkles2->scaleMin = 2.0f;
+  sparkles2->scaleMax = 5.0f;
+  sparkles2->spreadDegrees = 360.0f;
+  sparkles2->gravity = {0.0f, -30.0f};
 
   auto coin3 = addChild<CoinNode>();
   coin3->setPosition({1400.0f, 420.0f});
+  auto coinLight3 = coin3->addChild<PointLight2D>(90.0f, Color::from_rgba8(255, 215, 0, 140), 0.45f);
+  auto sparkles3 = coin3->addChild<CPUParticles2D>(12);
+  sparkles3->color = Color::GOLD;
+  sparkles3->scaleMin = 2.0f;
+  sparkles3->scaleMax = 5.0f;
+  sparkles3->spreadDegrees = 360.0f;
+  sparkles3->gravity = {0.0f, -30.0f};
 
   // Dynamic Crates
   auto crate1 = addChild<RigidBody2D>("Crate1");
@@ -269,10 +328,12 @@ void GameScene::onReady() {
   auto crate2Shape = crate2->addChild<CollisionShape2D>(Vector2(40.0f, 40.0f));
   crate2Shape->addChild<MeshInstance2D>(Vector2(40.0f, 40.0f), Color::from_rgba8(220, 160, 80));
 
-  // Player
+  // Player (Lantern PointLight2D, RayCast2D, and Camera2D created in PlayerNode::onReady)
   auto player = addChild<PlayerNode>();
   player->name = "Player";
   player->setPosition({300.0f, 300.0f});
+
+
 
   // HUD Theme
   auto hudTheme = makeRef<Theme>();
@@ -665,7 +726,105 @@ void UISimulationScene::onReady() {
   demoConfirm->canceled.connect([statusLabel]() {
     if (statusLabel) statusLabel->text = "Status: User CANCELED the dialog!";
   });
+
+  // ---------------------------------------------------------------------------
+  // Tab 6: 2D FX, Lighting & Splines
+  // ---------------------------------------------------------------------------
+  auto tab6 = tabs->addTab("2D FX & Lighting");
+  auto vbox6 = tab6->addChild<VBoxContainer>(14.0f);
+  vbox6->setPosition({20.0f, 20.0f});
+  vbox6->setSize({tabs->getSize().x - 40.0f, tabs->getSize().y - 40.0f});
+
+  vbox6->addChild<Label>("Procedural 2D Nodes, Particles & Lighting", 18.0f, Color::GOLD);
+
+  auto hbox6 = vbox6->addChild<HBoxContainer>(20.0f);
+
+  // Left card: Particle emitter & Light
+  auto fxCard = hbox6->addChild<Panel>();
+  fxCard->customMinimumSize = {360.0f, 240.0f};
+  fxCard->backgroundColor = Color::from_rgba8(20, 24, 35);
+  fxCard->borderColor = Color::from_rgba8(60, 75, 110);
+  auto fxCardLabel = fxCard->addChild<Label>("CPUParticles2D & PointLight2D", 15.0f, Color::from_rgba8(130, 230, 255));
+  fxCardLabel->setPosition({14.0f, 10.0f});
+
+  auto particles = fxCard->addChild<CPUParticles2D>(32);
+  particles->setPosition({180.0f, 160.0f});
+  particles->color = Color::from_rgba8(255, 140, 50);
+  particles->colorEnd = Color::from_rgba8(255, 50, 50, 0);
+  particles->scaleMin = 4.0f;
+  particles->scaleMax = 10.0f;
+  particles->initialVelocityMin = 60.0f;
+  particles->initialVelocityMax = 120.0f;
+  particles->spreadDegrees = 360.0f;
+  particles->gravity = {0.0f, -40.0f};
+
+  auto light = fxCard->addChild<PointLight2D>(120.0f, Color::from_rgba8(255, 180, 50, 180), 0.9f);
+  light->setPosition({180.0f, 160.0f});
+
+  // Middle card: Line2D and Polygon2D
+  auto polyCard = hbox6->addChild<Panel>();
+  polyCard->customMinimumSize = {360.0f, 240.0f};
+  polyCard->backgroundColor = Color::from_rgba8(20, 24, 35);
+  polyCard->borderColor = Color::from_rgba8(60, 75, 110);
+  auto polyCardLabel = polyCard->addChild<Label>("Line2D Polyline & Polygon2D", 15.0f, Color::from_rgba8(130, 230, 255));
+  polyCardLabel->setPosition({14.0f, 10.0f});
+
+  auto demoLine = polyCard->addChild<Line2D>();
+  demoLine->setPosition({30.0f, 60.0f});
+  demoLine->width = 6.0f;
+  demoLine->gradient = {Color::CYAN, Color::MAGENTA, Color::GOLD};
+  demoLine->addPoint({0.0f, 40.0f});
+  demoLine->addPoint({70.0f, 10.0f});
+  demoLine->addPoint({140.0f, 50.0f});
+  demoLine->addPoint({210.0f, 20.0f});
+  demoLine->addPoint({280.0f, 60.0f});
+
+  auto demoPoly = polyCard->addChild<Polygon2D>();
+  demoPoly->setPosition({180.0f, 165.0f});
+  demoPoly->color = Color::from_rgba8(0, 230, 180);
+  demoPoly->setPolygon({
+    {0.0f, -35.0f}, {10.0f, -10.0f}, {35.0f, -10.0f},
+    {15.0f, 6.0f}, {22.0f, 32.0f}, {0.0f, 16.0f},
+    {-22.0f, 32.0f}, {-15.0f, 6.0f}, {-35.0f, -10.0f},
+    {-10.0f, -10.0f}
+  });
+
+  // Right card: Controls & Stats
+  auto infoCard = hbox6->addChild<Panel>();
+  infoCard->customMinimumSize = {360.0f, 240.0f};
+  infoCard->backgroundColor = Color::from_rgba8(20, 24, 35);
+  infoCard->borderColor = Color::from_rgba8(60, 75, 110);
+  auto infoCardLabel = infoCard->addChild<Label>("2D Physics & Spatial Controls", 15.0f, Color::from_rgba8(130, 230, 255));
+  infoCardLabel->setPosition({14.0f, 10.0f});
+
+  auto infoContent = infoCard->addChild<VBoxContainer>(10.0f);
+  infoContent->setPosition({14.0f, 40.0f});
+  infoContent->setSize({330.0f, 180.0f});
+
+  auto burstBtn = infoContent->addChild<Button>("✦ Burst Particle Explosion");
+  burstBtn->customMinimumSize = {320.0f, 36.0f};
+  burstBtn->pressed.connect([particles]() {
+    if (particles) {
+      particles->explosiveness = 1.0f;
+      particles->restart();
+    }
+  });
+
+  auto emitToggle = infoContent->addChild<CheckButton>("Continuous Particles");
+  emitToggle->customMinimumSize = {240.0f, 32.0f};
+  emitToggle->setButtonPressed(true);
+  emitToggle->toggled.connect([particles](bool on) {
+    if (particles) particles->emitting = on;
+  });
+
+  auto lightToggle = infoContent->addChild<CheckButton>("PointLight2D Glow");
+  lightToggle->customMinimumSize = {240.0f, 32.0f};
+  lightToggle->setButtonPressed(true);
+  lightToggle->toggled.connect([light](bool on) {
+    if (light) light->enabled = on;
+  });
 }
+
 
 // =============================================================================
 // 6. MAIN ENTRY POINT

@@ -38,18 +38,41 @@
 #include "nodes/2D/SpriteFrames.hpp"
 #include "nodes/2D/AnimatedSprite2D.hpp"
 #include "nodes/2D/Transform2D.hpp"
+#include "nodes/2D/Line2D.hpp"
+#include "nodes/2D/Polygon2D.hpp"
+#include "nodes/2D/CPUParticles2D.hpp"
+#include "nodes/2D/Parallax2D.hpp"
+#include "nodes/2D/Marker2D.hpp"
+#include "nodes/2D/RemoteTransform2D.hpp"
+#include "nodes/2D/VisibleOnScreenNotifier2D.hpp"
+
+// 2D Paths & Splines
+#include "nodes/2D/Curve2D.hpp"
+#include "nodes/2D/Path2D.hpp"
+#include "nodes/2D/PathFollow2D.hpp"
+
+// 2D Lighting & Shadows
+#include "nodes/2D/CanvasModulate.hpp"
+#include "nodes/2D/Light2D.hpp"
+#include "nodes/2D/PointLight2D.hpp"
+#include "nodes/2D/DirectionalLight2D.hpp"
+#include "nodes/2D/OccluderPolygon2D.hpp"
+#include "nodes/2D/LightOccluder2D.hpp"
 
 // Audio Nodes (Godot-Inspired)
 #include "nodes/audio/AudioStreamPlayer.hpp"
 #include "nodes/audio/AudioStreamPlayer2D.hpp"
 
 // 2D Physics Nodes (Godot-Inspired)
+#include "nodes/2D/RayCast2D.hpp"
 #include "nodes/2D/physics/CollisionShape2D.hpp"
+#include "nodes/2D/physics/CollisionPolygon2D.hpp"
 #include "nodes/2D/physics/CollisionObject2D.hpp"
 #include "nodes/2D/physics/StaticBody2D.hpp"
 #include "nodes/2D/physics/CharacterBody2D.hpp"
 #include "nodes/2D/physics/Area2D.hpp"
 #include "nodes/2D/physics/RigidBody2D.hpp"
+
 
 // 2D Graphics, Textures & Fonts
 #include "renderers/Renderer2D.hpp"

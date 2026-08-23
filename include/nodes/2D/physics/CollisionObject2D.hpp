@@ -2,6 +2,7 @@
 
 #include "nodes/2D/Node2D.hpp"
 #include "nodes/2D/physics/CollisionShape2D.hpp"
+#include "nodes/2D/physics/CollisionPolygon2D.hpp"
 #include "physics/2D/PhysicsServer2D.hpp"
 #include "renderers/Renderer2D.hpp"
 #include <box2d/box2d.h>
@@ -96,7 +97,21 @@ public:
     }
   }
 
-  // One-line setup for rectangular shape and visual mesh
+  // Registers a child CollisionPolygon2D onto the Box2D physics body
+  virtual void registerChildPolygon(CollisionPolygon2D *poly) {
+    if (!poly || poly->disabled) return;
+    ensureBody();
+    if (!isBodyValid()) return;
+
+    b2ShapeDef shapeDef = b2DefaultShapeDef();
+    shapeDef.filter.categoryBits = collisionLayer;
+    shapeDef.filter.maskBits = collisionMask;
+    shapeDef.userData = this;
+
+    b2ShapeId sid = poly->createBox2DShape(m_bodyId, shapeDef);
+    applyShapeMaterial(sid);
+  }
+
   void setBox(const Vector2 &size, const Color &color = Color::WHITE, bool filled = true) {
     shapeType = CollisionShapeType::Rectangle;
     shapeSize = size;
@@ -182,10 +197,12 @@ public:
 
   void syncToPhysics() {
     if (!isBodyValid()) return;
-    b2Vec2 pos = PhysicsServer2D::toMeters(transform.position);
-    b2Rot rot = b2MakeRot(transform.rotation);
+    Transform2D globalTrans = getGlobalTransform();
+    b2Vec2 pos = PhysicsServer2D::toMeters(globalTrans.position);
+    b2Rot rot = b2MakeRot(globalTrans.rotation);
     b2Body_SetTransform(m_bodyId, pos, rot);
   }
+
 
   b2BodyId getBodyId() const { return m_bodyId; }
   bool isBodyValid() const { return b2Body_IsValid(m_bodyId); }
@@ -327,6 +344,19 @@ inline void CollisionShape2D::onReady() {
     curr = curr->getParent();
   }
 }
+
+// Inline definition of CollisionPolygon2D::onReady()
+inline void CollisionPolygon2D::onReady() {
+  Node *curr = getParent();
+  while (curr) {
+    if (auto colObj = dynamic_cast<CollisionObject2D *>(curr)) {
+      colObj->registerChildPolygon(this);
+      break;
+    }
+    curr = curr->getParent();
+  }
+}
+
 
 // Inline definition of PhysicsServer2D::syncRegisteredObjects()
 inline void PhysicsServer2D::syncRegisteredObjects() {

@@ -413,7 +413,11 @@ public:
     if (texture) drawTextureScreen(*texture, srcRect, screenPos, size, tint);
   }
 
-private:
+  // Returns the active SDL_Renderer handle.
+  static SDL_Renderer *getRenderer() {
+    return s_renderer;
+  }
+
   // Converts world position to active screen coordinate.
   static Vector2 toScreen(const Vector2 &worldPos) {
     return s_activeCamera ? s_activeCamera->worldToScreen(worldPos) : worldPos;
@@ -447,6 +451,8 @@ private:
     SDL_RenderGeometry(s_renderer, nullptr, verts, 4, indices, 6);
   }
 
+private:
   inline static SDL_Renderer *s_renderer = nullptr;
   inline static const Camera2D *s_activeCamera = nullptr;
 };
+

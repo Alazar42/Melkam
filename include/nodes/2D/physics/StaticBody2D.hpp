@@ -2,11 +2,12 @@
 
 #include "nodes/2D/physics/CollisionObject2D.hpp"
 
-// Immovable solid physics body (inspired by Godot's StaticBody2D) for walls, floors, and platforms.
+// Immovable or animated solid physics body (inspired by Godot's StaticBody2D / AnimatableBody2D) for walls, floors, and platforms.
 class StaticBody2D : public CollisionObject2D {
 public:
   float friction = 0.5f;
   float restitution = 0.0f; // Bounciness
+  bool syncToPhysicsEveryFrame = true;
 
   StaticBody2D() : CollisionObject2D("StaticBody2D") {}
   explicit StaticBody2D(std::string nodeName)
@@ -58,15 +59,23 @@ public:
     return body;
   }
 
+  void onPhysicsProcess(float delta) override {
+    (void)delta;
+    if (syncToPhysicsEveryFrame && isBodyValid()) {
+      syncToPhysics();
+    }
+  }
+
 protected:
   void createBody() override {
     b2WorldId worldId = PhysicsServer2D::getWorldId();
     if (!b2World_IsValid(worldId)) return;
 
+    Transform2D globalTrans = getGlobalTransform();
     b2BodyDef bodyDef = b2DefaultBodyDef();
     bodyDef.type = b2_staticBody;
-    bodyDef.position = PhysicsServer2D::toMeters(transform.position);
-    bodyDef.rotation = b2MakeRot(transform.rotation);
+    bodyDef.position = PhysicsServer2D::toMeters(globalTrans.position);
+    bodyDef.rotation = b2MakeRot(globalTrans.rotation);
     bodyDef.userData = this;
 
     m_bodyId = b2CreateBody(worldId, &bodyDef);
@@ -79,3 +88,5 @@ protected:
     }
   }
 };
+
+using AnimatableBody2D = StaticBody2D;
