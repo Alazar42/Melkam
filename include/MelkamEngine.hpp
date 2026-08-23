@@ -9,6 +9,9 @@
 #include "helper/msl.hpp"
 #include "helper/Rect2.hpp"
 
+// Memory & Smart Pointer Aliases (Ref<T>, Shared<T>, Scope<T>, Unique<T>, Weak<T>)
+#include "core/Memory.hpp"
+
 // Input, Time & Core Node
 #include "input.hpp"
 #include "time.hpp"

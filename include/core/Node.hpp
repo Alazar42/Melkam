@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Memory.hpp"
 #include "core/Signal.hpp"
 #include "helper/vectors/Vector2.hpp"
 #include "input.hpp"

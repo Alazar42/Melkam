@@ -7,7 +7,7 @@ public:
   float speed = 350.0f;
   float jumpVelocity = -750.0f;
   float gravity = 1400.0f;
-  std::shared_ptr<Camera2D> camera = nullptr;
+  Ref<Camera2D> camera = nullptr;
 
   void onReady() override {
     // 1. Attach CollisionShape2D child using addChild
@@ -61,8 +61,8 @@ public:
 
 // Global HUD references
 static int g_coinsCollected = 0;
-static std::shared_ptr<Label> g_coinLabel = nullptr;
-static std::shared_ptr<ProgressBar> g_progressBar = nullptr;
+static Ref<Label> g_coinLabel = nullptr;
+static Ref<ProgressBar> g_progressBar = nullptr;
 
 // 2. Collectible Coin Trigger (Area2D with Godot body_entered Signal & Shiny
 // Coin Sprite)
@@ -177,12 +177,12 @@ int main() {
   // =========================================================================
 
   // Load UI Texture Assets
-  auto panelTex = std::make_shared<Texture2D>("assets/UI/panel_frame.png");
-  auto coinTex = std::make_shared<Texture2D>("assets/UI/coin_icon.png");
-  auto btnTex = std::make_shared<Texture2D>("assets/UI/button_frame.png");
+  auto panelTex = makeRef<Texture2D>("assets/UI/panel_frame.png");
+  auto coinTex = makeRef<Texture2D>("assets/UI/coin_icon.png");
+  auto btnTex = makeRef<Texture2D>("assets/UI/button_frame.png");
 
   // A. Create a Custom Futuristic Cyan HUD Theme for the HUD Panel Subtree
-  auto hudTheme = std::make_shared<Theme>();
+  auto hudTheme = makeRef<Theme>();
   hudTheme->setColor("font_color", "Label", Color::from_rgba8(130, 230, 255));
   hudTheme->setFontSize("font_size", "Label", 16);
 
