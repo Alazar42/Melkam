@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Memory.hpp"
 #include "nodes/UI/Control.hpp"
 #include "renderers/Texture2D.hpp"
 #include <memory>
@@ -7,7 +8,7 @@
 // 9-Slice Scalable Texture Panel (inspired by Godot NinePatchRect).
 class NinePatchRect : public Control {
 public:
-  std::shared_ptr<Texture2D> texture = nullptr;
+  Ref<Texture2D> texture = nullptr;
   int patchMarginLeft = 0;
   int patchMarginTop = 0;
   int patchMarginRight = 0;
@@ -19,7 +20,7 @@ public:
     mouseFilter = MouseFilter::Pass;
   }
 
-  explicit NinePatchRect(std::shared_ptr<Texture2D> tex, int margin = 0)
+  explicit NinePatchRect(Ref<Texture2D> tex, int margin = 0)
       : Control("NinePatchRect"), texture(std::move(tex)) {
     mouseFilter = MouseFilter::Pass;
     setAllMargins(margin);
@@ -68,3 +69,4 @@ public:
     }
   }
 };
+

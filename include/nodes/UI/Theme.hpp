@@ -1,16 +1,18 @@
 #pragma once
 
+#include "core/Memory.hpp"
 #include "helper/color/Color.hpp"
+#include "nodes/UI/StyleBox.hpp"
 #include "renderers/Font.hpp"
 #include "renderers/Texture2D.hpp"
 #include <memory>
 #include <string>
 #include <unordered_map>
 
-// Godot-style Theme Resource for central UI styling configuration.
+// Godot-style Theme Resource for central UI styling configuration & StyleBox skinning.
 class Theme {
 public:
-  std::shared_ptr<Font> defaultFont = nullptr;
+  Ref<Font> defaultFont = nullptr;
   int defaultFontSize = 16;
 
   Theme() = default;
@@ -42,7 +44,7 @@ public:
   // =========================================================================
   // Font Items
   // =========================================================================
-  void setFont(const std::string &name, const std::string &nodeType, std::shared_ptr<Font> font) {
+  void setFont(const std::string &name, const std::string &nodeType, Ref<Font> font) {
     m_fonts[makeKey(name, nodeType)] = std::move(font);
   }
 
@@ -52,8 +54,8 @@ public:
            (defaultFont != nullptr);
   }
 
-  std::shared_ptr<Font> getFont(const std::string &name = "font",
-                                const std::string &nodeType = "") const {
+  Ref<Font> getFont(const std::string &name = "font",
+                    const std::string &nodeType = "") const {
     auto it = m_fonts.find(makeKey(name, nodeType));
     if (it != m_fonts.end()) return it->second;
 
@@ -116,7 +118,7 @@ public:
   // Texture Items (Panel backgrounds, Button skins, Icons)
   // =========================================================================
   void setTexture(const std::string &name, const std::string &nodeType,
-                  std::shared_ptr<Texture2D> texture) {
+                  Ref<Texture2D> texture) {
     m_textures[makeKey(name, nodeType)] = std::move(texture);
   }
 
@@ -125,8 +127,8 @@ public:
            (!nodeType.empty() && m_textures.find(makeKey(name, "")) != m_textures.end());
   }
 
-  std::shared_ptr<Texture2D> getTexture(const std::string &name = "texture",
-                                        const std::string &nodeType = "") const {
+  Ref<Texture2D> getTexture(const std::string &name = "texture",
+                            const std::string &nodeType = "") const {
     auto it = m_textures.find(makeKey(name, nodeType));
     if (it != m_textures.end()) return it->second;
 
@@ -138,22 +140,45 @@ public:
   }
 
   // =========================================================================
+  // StyleBox Items (Flat backgrounds, Borders, 9-Slices)
+  // =========================================================================
+  void setStyleBox(const std::string &name, const std::string &nodeType, Ref<StyleBox> styleBox) {
+    m_styleBoxes[makeKey(name, nodeType)] = std::move(styleBox);
+  }
+
+  bool hasStyleBox(const std::string &name, const std::string &nodeType = "") const {
+    return m_styleBoxes.find(makeKey(name, nodeType)) != m_styleBoxes.end() ||
+           (!nodeType.empty() && m_styleBoxes.find(makeKey(name, "")) != m_styleBoxes.end());
+  }
+
+  Ref<StyleBox> getStyleBox(const std::string &name, const std::string &nodeType = "") const {
+    auto it = m_styleBoxes.find(makeKey(name, nodeType));
+    if (it != m_styleBoxes.end()) return it->second;
+
+    if (!nodeType.empty()) {
+      it = m_styleBoxes.find(makeKey(name, ""));
+      if (it != m_styleBoxes.end()) return it->second;
+    }
+    return nullptr;
+  }
+
+  // =========================================================================
   // Global Engine Theme Singletons
   // =========================================================================
-  static std::shared_ptr<Theme> getDefaultTheme() {
+  static Ref<Theme> getDefaultTheme() {
     if (!s_defaultTheme) {
       s_defaultTheme = createDefaultDarkTheme();
     }
     return s_defaultTheme;
   }
 
-  static void setDefaultTheme(std::shared_ptr<Theme> theme) {
+  static void setDefaultTheme(Ref<Theme> theme) {
     s_defaultTheme = std::move(theme);
   }
 
   // Default Godot-inspired Modern Dark Theme
-  static std::shared_ptr<Theme> createDefaultDarkTheme() {
-    auto theme = std::make_shared<Theme>();
+  static Ref<Theme> createDefaultDarkTheme() {
+    auto theme = makeRef<Theme>();
     theme->defaultFont = Font::getDefaultFont();
     theme->defaultFontSize = 16;
 
@@ -162,6 +187,7 @@ public:
     theme->setColor("border_color", "Panel", Color::from_rgba8(65, 75, 105));
     theme->setConstant("corner_radius", "Panel", 6);
     theme->setConstant("border_width", "Panel", 1);
+    theme->setStyleBox("panel", "Panel", makeRef<StyleBoxFlat>(Color::from_rgba8(25, 28, 38, 230), 6.0f, 1.0f, Color::from_rgba8(65, 75, 105)));
 
     // Button
     theme->setColor("normal_color", "Button", Color::from_rgba8(45, 52, 75));
@@ -172,6 +198,11 @@ public:
     theme->setColor("border_color", "Button", Color::from_rgba8(90, 100, 130));
     theme->setConstant("corner_radius", "Button", 4);
     theme->setConstant("border_width", "Button", 1);
+
+    theme->setStyleBox("normal", "Button", makeRef<StyleBoxFlat>(Color::from_rgba8(45, 52, 75), 4.0f, 1.0f, Color::from_rgba8(90, 100, 130)));
+    theme->setStyleBox("hover", "Button", makeRef<StyleBoxFlat>(Color::from_rgba8(65, 80, 120), 4.0f, 1.0f, Color::from_rgba8(130, 150, 200)));
+    theme->setStyleBox("pressed", "Button", makeRef<StyleBoxFlat>(Color::from_rgba8(30, 38, 55), 4.0f, 1.0f, Color::from_rgba8(50, 60, 90)));
+    theme->setStyleBox("disabled", "Button", makeRef<StyleBoxFlat>(Color::from_rgba8(30, 30, 35), 4.0f, 1.0f, Color::from_rgba8(50, 50, 60)));
 
     // Label
     theme->setColor("font_color", "Label", Color::WHITE);
@@ -220,6 +251,12 @@ public:
     theme->setColor("track_on_color", "CheckButton", Color::from_rgba8(52, 199, 89));
     theme->setColor("thumb_color", "CheckButton", Color::WHITE);
 
+    // TabContainer
+    theme->setColor("tab_bg_color", "TabContainer", Color::from_rgba8(35, 40, 55));
+    theme->setColor("tab_active_bg_color", "TabContainer", Color::from_rgba8(55, 65, 95));
+    theme->setColor("tab_hover_bg_color", "TabContainer", Color::from_rgba8(45, 52, 75));
+    theme->setColor("font_color", "TabContainer", Color::WHITE);
+
     return theme;
   }
 
@@ -231,9 +268,10 @@ private:
 
   std::unordered_map<std::string, Color> m_colors;
   std::unordered_map<std::string, int> m_constants;
-  std::unordered_map<std::string, std::shared_ptr<Font>> m_fonts;
+  std::unordered_map<std::string, Ref<Font>> m_fonts;
   std::unordered_map<std::string, int> m_fontSizes;
-  std::unordered_map<std::string, std::shared_ptr<Texture2D>> m_textures;
+  std::unordered_map<std::string, Ref<Texture2D>> m_textures;
+  std::unordered_map<std::string, Ref<StyleBox>> m_styleBoxes;
 
-  inline static std::shared_ptr<Theme> s_defaultTheme = nullptr;
+  inline static Ref<Theme> s_defaultTheme = nullptr;
 };

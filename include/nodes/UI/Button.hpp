@@ -1,34 +1,52 @@
 #pragma once
 
+#include "core/Memory.hpp"
 #include "nodes/UI/CheckBox.hpp"
+#include "nodes/UI/StyleBox.hpp"
 #include "renderers/Font.hpp"
 #include "renderers/Texture2D.hpp"
 #include <algorithm>
 #include <memory>
 #include <string>
 
-// Interactive Push Button Node (inspired by Godot Button) with hover, pressed styles, icons, and textures.
+// Icon alignment inside Button (inspired by Godot Button.IconAlignment)
+enum class IconAlignment {
+  Left,
+  Right,
+  Center,
+  Top
+};
+
+// Interactive Push Button Node (inspired by Godot Button) with hover, pressed styles, icons, StyleBoxes, and textures.
 class Button : public BaseButton {
 public:
   // Text & Visuals
   std::string text;
-  std::shared_ptr<Font> font = nullptr;
+  Ref<Font> font = nullptr;
   float fontSize = 0.0f; // 0 = inherits from active theme
   bool flat = false;
+  IconAlignment iconAlignment = IconAlignment::Left;
 
   // Icon Support (Godot Button.icon)
-  std::shared_ptr<Texture2D> icon = nullptr;
+  Ref<Texture2D> icon = nullptr;
   Vector2 iconSize{0.0f, 0.0f};
 
   // Optional Texture Skins (Godot StyleBoxTexture)
-  std::shared_ptr<Texture2D> textureNormal = nullptr;
-  std::shared_ptr<Texture2D> textureHover = nullptr;
-  std::shared_ptr<Texture2D> texturePressed = nullptr;
-  std::shared_ptr<Texture2D> textureDisabled = nullptr;
+  Ref<Texture2D> textureNormal = nullptr;
+  Ref<Texture2D> textureHover = nullptr;
+  Ref<Texture2D> texturePressed = nullptr;
+  Ref<Texture2D> textureDisabled = nullptr;
   float patchMarginLeft = 0.0f;
   float patchMarginTop = 0.0f;
   float patchMarginRight = 0.0f;
   float patchMarginBottom = 0.0f;
+
+  // Optional Custom StyleBoxes
+  Ref<StyleBox> styleNormal = nullptr;
+  Ref<StyleBox> styleHover = nullptr;
+  Ref<StyleBox> stylePressed = nullptr;
+  Ref<StyleBox> styleDisabled = nullptr;
+  Ref<StyleBox> styleFocus = nullptr;
 
   // Colors & Theme Styling (Color(0,0,0,0) sentinels inherit from active theme)
   Color normalColor = Color(0, 0, 0, 0);
@@ -52,8 +70,15 @@ public:
   void drawControl() override {
     Rect2 rect = getGlobalRect();
 
-    // 1. Check if textured background is used
-    std::shared_ptr<Texture2D> activeTex = nullptr;
+    // 1. Check custom StyleBox overrides
+    Ref<StyleBox> activeStyle = nullptr;
+    if (disabled) activeStyle = styleDisabled ? styleDisabled : getThemeStylebox("disabled", "Button");
+    else if (m_isDown && m_isHovered) activeStyle = stylePressed ? stylePressed : getThemeStylebox("pressed", "Button");
+    else if (m_isHovered) activeStyle = styleHover ? styleHover : getThemeStylebox("hover", "Button");
+    else activeStyle = styleNormal ? styleNormal : getThemeStylebox("normal", "Button");
+
+    // 2. Check if textured background is used
+    Ref<Texture2D> activeTex = nullptr;
     if (disabled && textureDisabled) activeTex = textureDisabled;
     else if (m_isDown && m_isHovered && texturePressed) activeTex = texturePressed;
     else if (m_isHovered && textureHover) activeTex = textureHover;
@@ -67,6 +92,8 @@ public:
       } else {
         Renderer2D::drawTextureScreen(activeTex.get(), rect.position, rect.size, modulate);
       }
+    } else if (activeStyle && !flat) {
+      activeStyle->draw(rect, modulate);
     } else if (!flat) {
       Color norm = (normalColor.a > 0.0f)
                        ? normalColor
@@ -102,8 +129,17 @@ public:
                                         bw);
     }
 
-    // 2. Render Icon + Label
-    std::shared_ptr<Font> activeFont = font ? font : getThemeFont("font", "Button");
+    // 3. Draw Focus Ring if focused
+    if (hasFocus() && !disabled) {
+      Renderer2D::drawRoundedRectScreen(rect.position - Vector2(2.0f, 2.0f),
+                                        rect.size + Vector2(4.0f, 4.0f),
+                                        (cornerRadius >= 0.0f ? cornerRadius + 2.0f : 6.0f),
+                                        Color(0, 0, 0, 0),
+                                        Color::from_rgba8(100, 160, 255, 200), 1.5f);
+    }
+
+    // 4. Render Icon + Label
+    Ref<Font> activeFont = font ? font : getThemeFont("font", "Button");
     const Font &f = activeFont ? *activeFont : *Font::getDefaultFont();
     float activeSize = (fontSize > 0.0f)
                            ? fontSize
@@ -132,7 +168,7 @@ public:
 
     if (icon && icon->isValid()) {
       Renderer2D::drawTextureScreen(icon.get(), Vector2(startX, centerY + (std::max(textSize.y, iconH) - iconH) * 0.5f),
-                                   Vector2(iconW, iconH), modulate);
+                                    Vector2(iconW, iconH), modulate);
       startX += iconW + 8.0f;
     }
 
@@ -172,3 +208,4 @@ private:
     }
   }
 };
+

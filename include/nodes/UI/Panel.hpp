@@ -1,14 +1,17 @@
 #pragma once
 
+#include "core/Memory.hpp"
 #include "nodes/UI/Control.hpp"
+#include "nodes/UI/StyleBox.hpp"
 #include "renderers/Texture2D.hpp"
 #include <algorithm>
 #include <memory>
 
-// Styled Background Panel Box Node (inspired by Godot Panel / PanelContainer & StyleBoxTexture).
+// Styled Background Panel Box Node (inspired by Godot Panel / StyleBoxTexture).
 class Panel : public Control {
 public:
-  std::shared_ptr<Texture2D> texture = nullptr;
+  Ref<Texture2D> texture = nullptr;
+  Ref<StyleBox> styleBox = nullptr;
   float patchMarginLeft = 0.0f;
   float patchMarginTop = 0.0f;
   float patchMarginRight = 0.0f;
@@ -26,8 +29,15 @@ public:
 
   void drawControl() override {
     Rect2 rect = getGlobalRect();
-    std::shared_ptr<Texture2D> activeTex = texture ? texture : getThemeTexture("texture", "Panel");
 
+    // 1. Custom or theme StyleBox
+    Ref<StyleBox> activeStyle = styleBox ? styleBox : getThemeStylebox("panel", "Panel");
+    if (activeStyle && !texture) {
+      activeStyle->draw(rect, modulate);
+      return;
+    }
+
+    Ref<Texture2D> activeTex = texture ? texture : getThemeTexture("texture", "Panel");
     if (activeTex && activeTex->isValid()) {
       if (patchMarginLeft > 0.0f || patchMarginTop > 0.0f ||
           patchMarginRight > 0.0f || patchMarginBottom > 0.0f) {
@@ -106,3 +116,4 @@ public:
     Renderer2D::drawRectScreen(rect.position, rect.size, color * modulate, true);
   }
 };
+

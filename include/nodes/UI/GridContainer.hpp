@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Memory.hpp"
 #include "nodes/UI/BoxContainer.hpp"
 #include <algorithm>
 #include <vector>
@@ -21,7 +22,7 @@ public:
     int cols = std::max(1, columns);
 
     // Calculate visible children
-    std::vector<std::shared_ptr<Control>> visibleControls;
+    std::vector<Ref<Control>> visibleControls;
     for (const auto &child : getChildren()) {
       auto ctrl = std::dynamic_pointer_cast<Control>(child);
       if (ctrl && ctrl->visible) {
@@ -50,3 +51,4 @@ public:
     }
   }
 };
+

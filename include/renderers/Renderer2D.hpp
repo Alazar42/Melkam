@@ -341,11 +341,12 @@ public:
   // Draws text in screen space using the provided Font or default font.
   static void drawText(const std::string &text, const Vector2 &screenPos,
                        const Color &color = Color::WHITE, float fontSize = 16.0f,
-                       const std::shared_ptr<Font> &font = nullptr) {
+                       const Ref<Font> &font = nullptr) {
     if (!s_renderer || text.empty()) return;
     const Font &activeFont = font ? *font : *Font::getDefaultFont();
     activeFont.drawText(s_renderer, text, screenPos, color, fontSize);
   }
+
 
   // Draws a flat rectangle in screen space.
   static void drawRectScreen(const Vector2 &screenPos, const Vector2 &size,

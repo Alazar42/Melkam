@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/Memory.hpp"
+#include "nodes/UI/AspectRatioContainer.hpp"
 #include "nodes/UI/BoxContainer.hpp"
 #include <algorithm>
 
@@ -32,40 +34,3 @@ public:
   }
 };
 
-// Aspect Ratio Container (inspired by Godot AspectRatioContainer) preserving child aspect ratio.
-class AspectRatioContainer : public Container {
-public:
-  float ratio = 1.0f; // Aspect ratio (width / height)
-
-  AspectRatioContainer() : Container("AspectRatioContainer") {}
-  explicit AspectRatioContainer(float targetRatio)
-      : Container("AspectRatioContainer"), ratio(targetRatio) {}
-
-  void fitChildControls() override {
-    Rect2 rect = getGlobalRect();
-    if (rect.size.y <= 0.0f || ratio <= 0.0f) return;
-
-    float containerRatio = rect.size.x / rect.size.y;
-    float fitW = rect.size.x;
-    float fitH = rect.size.y;
-
-    if (containerRatio > ratio) {
-      fitW = rect.size.y * ratio;
-    } else {
-      fitH = rect.size.x / ratio;
-    }
-
-    float posX = (rect.size.x - fitW) * 0.5f;
-    float posY = (rect.size.y - fitH) * 0.5f;
-
-    for (const auto &child : getChildren()) {
-      auto ctrl = std::dynamic_pointer_cast<Control>(child);
-      if (!ctrl || !ctrl->visible) continue;
-
-      ctrl->offsetLeft = posX;
-      ctrl->offsetTop = posY;
-      ctrl->offsetRight = posX + fitW;
-      ctrl->offsetBottom = posY + fitH;
-    }
-  }
-};

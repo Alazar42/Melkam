@@ -1,15 +1,19 @@
 #pragma once
 
+#include "core/Memory.hpp"
 #include "nodes/UI/Control.hpp"
 #include "renderers/Font.hpp"
 #include <algorithm>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <vector>
 
 enum class HorizontalAlignment {
   Left,
   Center,
-  Right
+  Right,
+  Fill
 };
 
 enum class VerticalAlignment {
@@ -18,15 +22,20 @@ enum class VerticalAlignment {
   Bottom
 };
 
-// UI Label Node (inspired by Godot Label) for displaying styled text.
+// UI Label Node (inspired by Godot Label) for displaying single/multi-line styled text.
 class Label : public Control {
 public:
   std::string text;
-  std::shared_ptr<Font> font = nullptr;
+  Ref<Font> font = nullptr;
   float fontSize = 0.0f; // 0 = inherits from active theme
   Color fontColor = Color(0.0f, 0.0f, 0.0f, 0.0f); // transparent sentinel = inherits from active theme
   Color shadowColor = Color(0.0f, 0.0f, 0.0f, 0.0f);
   Vector2 shadowOffset{1.0f, 1.0f};
+  Color outlineColor = Color(0.0f, 0.0f, 0.0f, 0.0f);
+  float outlineSize = 0.0f;
+  float lineSpacing = 3.0f;
+  bool autowrap = false;
+  bool clipText = false;
 
   HorizontalAlignment horizontalAlignment = HorizontalAlignment::Left;
   VerticalAlignment verticalAlignment = VerticalAlignment::Top;
@@ -44,7 +53,7 @@ public:
     if (text.empty()) return;
 
     Rect2 rect = getGlobalRect();
-    std::shared_ptr<Font> activeFont = font ? font : getThemeFont("font", "Label");
+    Ref<Font> activeFont = font ? font : getThemeFont("font", "Label");
     const Font &f = activeFont ? *activeFont : *Font::getDefaultFont();
 
     float activeSize = (fontSize > 0.0f)
@@ -57,30 +66,89 @@ public:
                              ? shadowColor
                              : getThemeColor("shadow_color", "Label", Color(0.0f, 0.0f, 0.0f, 0.0f));
 
-    Vector2 textSize = f.getStringSize(text, activeSize);
-
-    // Compute text position based on alignments
-    float drawX = rect.position.x;
-    if (horizontalAlignment == HorizontalAlignment::Center) {
-      drawX = rect.position.x + (rect.size.x - textSize.x) * 0.5f;
-    } else if (horizontalAlignment == HorizontalAlignment::Right) {
-      drawX = rect.position.x + (rect.size.x - textSize.x);
+    // Split lines
+    std::vector<std::string> lines;
+    if (autowrap && rect.size.x > 0.0f) {
+      lines = wrapText(text, f, activeSize, rect.size.x);
+    } else {
+      std::stringstream ss(text);
+      std::string line;
+      while (std::getline(ss, line, '\n')) {
+        lines.push_back(line);
+      }
     }
+    if (lines.empty()) return;
 
-    float drawY = rect.position.y;
+    float fontH = activeSize;
+    float totalH = lines.size() * fontH + (lines.size() > 1 ? (lines.size() - 1) * lineSpacing : 0.0f);
+
+    float startY = rect.position.y;
     if (verticalAlignment == VerticalAlignment::Center) {
-      drawY = rect.position.y + (rect.size.y - textSize.y) * 0.5f;
+      startY = rect.position.y + (rect.size.y - totalH) * 0.5f;
     } else if (verticalAlignment == VerticalAlignment::Bottom) {
-      drawY = rect.position.y + (rect.size.y - textSize.y);
+      startY = rect.position.y + (rect.size.y - totalH);
     }
 
-    // Optional text shadow
-    if (activeShadow.a > 0.0f) {
-      Renderer2D::drawText(text, Vector2(drawX + shadowOffset.x, drawY + shadowOffset.y),
-                           activeShadow, activeSize, activeFont);
-    }
+    for (size_t i = 0; i < lines.size(); ++i) {
+      const auto &line = lines[i];
+      Vector2 lineSize = f.getStringSize(line, activeSize);
 
-    // Text foreground
-    Renderer2D::drawText(text, Vector2(drawX, drawY), activeColor * modulate, activeSize, activeFont);
+      float drawX = rect.position.x;
+      if (horizontalAlignment == HorizontalAlignment::Center) {
+        drawX = rect.position.x + (rect.size.x - lineSize.x) * 0.5f;
+      } else if (horizontalAlignment == HorizontalAlignment::Right) {
+        drawX = rect.position.x + (rect.size.x - lineSize.x);
+      }
+
+      float drawY = startY + i * (fontH + lineSpacing);
+
+      // Optional text outline
+      if (outlineColor.a > 0.0f && outlineSize > 0.0f) {
+        for (float ox = -outlineSize; ox <= outlineSize; ox += outlineSize) {
+          for (float oy = -outlineSize; oy <= outlineSize; oy += outlineSize) {
+            if (ox != 0.0f || oy != 0.0f) {
+              Renderer2D::drawText(line, Vector2(drawX + ox, drawY + oy), outlineColor * modulate, activeSize, activeFont);
+            }
+          }
+        }
+      }
+
+      // Optional text shadow
+      if (activeShadow.a > 0.0f) {
+        Renderer2D::drawText(line, Vector2(drawX + shadowOffset.x, drawY + shadowOffset.y),
+                             activeShadow * modulate, activeSize, activeFont);
+      }
+
+      // Text foreground
+      Renderer2D::drawText(line, Vector2(drawX, drawY), activeColor * modulate, activeSize, activeFont);
+    }
+  }
+
+private:
+  static std::vector<std::string> wrapText(const std::string &str, const Font &f, float size, float maxW) {
+    std::vector<std::string> result;
+    std::stringstream ss(str);
+    std::string paragraph;
+
+    while (std::getline(ss, paragraph, '\n')) {
+      std::stringstream words(paragraph);
+      std::string word;
+      std::string currentLine;
+
+      while (words >> word) {
+        std::string testLine = currentLine.empty() ? word : currentLine + " " + word;
+        Vector2 testSize = f.getStringSize(testLine, size);
+        if (testSize.x > maxW && !currentLine.empty()) {
+          result.push_back(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      if (!currentLine.empty()) {
+        result.push_back(currentLine);
+      }
+    }
+    return result;
   }
 };

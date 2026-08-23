@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Memory.hpp"
 #include "nodes/UI/Range.hpp"
 #include "renderers/Font.hpp"
 #include <algorithm>
@@ -12,6 +13,8 @@
 class ProgressBar : public Range {
 public:
   bool showPercentage = true;
+  bool vertical = false;
+  std::string customText; // If non-empty, overrides percentage display
 
   // Colors & Theme Styling
   Color fillColor = Color(0, 0, 0, 0);       // Sentinel (inherits from theme if empty)
@@ -23,6 +26,18 @@ public:
 
   ProgressBar() : Range("ProgressBar") {
     customMinimumSize = {160.0f, 24.0f};
+    mouseFilter = MouseFilter::Ignore;
+    value = 100.0f;
+    step = 0.01f;
+  }
+
+  explicit ProgressBar(bool isVertical, std::string nodeName = "ProgressBar")
+      : Range(std::move(nodeName)), vertical(isVertical) {
+    if (vertical) {
+      customMinimumSize = {24.0f, 160.0f};
+    } else {
+      customMinimumSize = {160.0f, 24.0f};
+    }
     mouseFilter = MouseFilter::Ignore;
     value = 100.0f;
     step = 0.01f;
@@ -59,20 +74,30 @@ public:
     float ratio = getRatio();
     if (ratio > 0.0f) {
       float innerPad = std::max(1.0f, bw);
-      float fillW = (rect.size.x - (innerPad * 2.0f)) * ratio;
-      float fillH = rect.size.y - (innerPad * 2.0f);
-      Vector2 fillPos = rect.position + Vector2(innerPad, innerPad);
-
-      Renderer2D::drawRoundedRectScreen(fillPos, Vector2(fillW, fillH), cr,
-                                        fill * modulate);
+      if (!vertical) {
+        float fillW = (rect.size.x - (innerPad * 2.0f)) * ratio;
+        float fillH = rect.size.y - (innerPad * 2.0f);
+        Vector2 fillPos = rect.position + Vector2(innerPad, innerPad);
+        Renderer2D::drawRoundedRectScreen(fillPos, Vector2(fillW, fillH), cr,
+                                          fill * modulate);
+      } else {
+        float fillW = rect.size.x - (innerPad * 2.0f);
+        float fillH = (rect.size.y - (innerPad * 2.0f)) * ratio;
+        Vector2 fillPos{rect.position.x + innerPad, rect.position.y + rect.size.y - innerPad - fillH};
+        Renderer2D::drawRoundedRectScreen(fillPos, Vector2(fillW, fillH), cr,
+                                          fill * modulate);
+      }
     }
 
     // 3. Optional centered percentage text
-    if (showPercentage) {
-      int percent = static_cast<int>(ratio * 100.0f + 0.5f);
-      std::string text = std::to_string(percent) + "%";
+    if (showPercentage || !customText.empty()) {
+      std::string text = customText;
+      if (text.empty()) {
+        int percent = static_cast<int>(ratio * 100.0f + 0.5f);
+        text = std::to_string(percent) + "%";
+      }
 
-      std::shared_ptr<Font> f = getThemeFont("font", "ProgressBar");
+      Ref<Font> f = getThemeFont("font", "ProgressBar");
       const Font &font = f ? *f : *Font::getDefaultFont();
       Vector2 textSize = font.getStringSize(text, 14.0f);
 
@@ -83,3 +108,4 @@ public:
     }
   }
 };
+

@@ -1,8 +1,10 @@
 #pragma once
 
+#include "core/Memory.hpp"
 #include "nodes/UI/Button.hpp"
 #include "renderers/Font.hpp"
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,7 +22,7 @@ public:
 
   std::vector<OptionItem> items;
   int selectedIndex = -1;
-  std::shared_ptr<Font> font = nullptr;
+  Ref<Font> font = nullptr;
   float fontSize = 0.0f; // 0 = inherits from active theme
 
   // Colors & Theme Styling
@@ -111,7 +113,7 @@ public:
     float activeSize = (fontSize > 0.0f)
                            ? fontSize
                            : static_cast<float>(getThemeFontSize("font_size", "OptionButton", 17));
-    std::shared_ptr<Font> activeFont = font ? font : getThemeFont("font", "OptionButton");
+    Ref<Font> activeFont = font ? font : getThemeFont("font", "OptionButton");
 
     Control::setModalOverlay(
         this,
@@ -199,7 +201,7 @@ public:
     float activeSize = (fontSize > 0.0f)
                            ? fontSize
                            : static_cast<float>(getThemeFontSize("font_size", "OptionButton", 17));
-    std::shared_ptr<Font> activeFont = font ? font : getThemeFont("font", "OptionButton");
+    Ref<Font> activeFont = font ? font : getThemeFont("font", "OptionButton");
 
     // 1. Draw Main Button Box
     Color activeBg = (m_isHovered || m_isMenuOpen) ? hov : norm;

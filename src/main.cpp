@@ -194,9 +194,46 @@ int main() {
   hudTheme->setColor("font_color", "ProgressBar", Color::WHITE);
   hudTheme->setConstant("corner_radius", "ProgressBar", 4);
 
+  // Top MenuBar
+  auto menuBar = app.addChild<MenuBar>();
+  menuBar->setPosition({0.0f, 0.0f});
+  menuBar->setSize({1280.0f, 28.0f});
+
+  // Modal Dialogs
+  auto aboutDialog = app.addChild<AcceptDialog>("MelkamEngine v1.0\nA modern Godot-inspired C++ Game Engine!", "About MelkamEngine");
+  auto restartDialog = app.addChild<ConfirmationDialog>("Do you want to reset collected coins and player position?", "Restart Level");
+
+  restartDialog->confirmed.connect([player]() {
+    g_coinsCollected = 0;
+    if (g_coinLabel) g_coinLabel->text = "Coins Collected: 0 / 3";
+    if (g_progressBar) g_progressBar->setValue(0.0f);
+    if (player) {
+      player->setPosition({300.0f, 300.0f});
+      player->velocity = {0.0f, 0.0f};
+    }
+    std::cout << "=== Level Restarted! ===" << std::endl;
+  });
+
+  auto fileMenu = makeRef<PopupMenu>();
+  fileMenu->addItem("Restart Level", 1);
+  fileMenu->addSeparator();
+  fileMenu->addItem("Quit", 2);
+  fileMenu->id_pressed.connect([restartDialog](int id) {
+    if (id == 1 && restartDialog) restartDialog->popupCentered({380.0f, 180.0f});
+    else if (id == 2) std::exit(0);
+  });
+  menuBar->addMenu("File", fileMenu);
+
+  auto helpMenu = makeRef<PopupMenu>();
+  helpMenu->addItem("About MelkamEngine", 1);
+  helpMenu->id_pressed.connect([aboutDialog](int id) {
+    if (id == 1 && aboutDialog) aboutDialog->popupCentered({400.0f, 200.0f});
+  });
+  menuBar->addMenu("Help", helpMenu);
+
   // Top-Left HUD Card Panel (Uses 9-Slice Textured Panel Frame + Custom Theme)
   auto hudPanel = app.addChild<Panel>();
-  hudPanel->setPosition({24.0f, 24.0f});
+  hudPanel->setPosition({24.0f, 40.0f});
   hudPanel->setSize({320.0f, 136.0f});
   hudPanel->texture = panelTex;
   hudPanel->patchMarginLeft = 20.0f;
@@ -225,10 +262,9 @@ int main() {
   g_progressBar->setSize({278.0f, 24.0f});
   g_progressBar->setValue(0.0f);
 
-  // B. Top-Right Game Controls Panel (Uses 9-slice panel texture + global
-  // theme)
+  // B. Top-Right Game Controls Panel (Uses 9-slice panel texture + global theme)
   auto controlsPanel = app.addChild<Panel>();
-  controlsPanel->setPosition({924.0f, 24.0f});
+  controlsPanel->setPosition({924.0f, 40.0f});
   controlsPanel->setSize({332.0f, 280.0f});
   controlsPanel->texture = panelTex;
   controlsPanel->patchMarginLeft = 20.0f;

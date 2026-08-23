@@ -1,19 +1,23 @@
 #pragma once
 
+#include "core/Memory.hpp"
 #include "core/Node.hpp"
 #include "core/Signal.hpp"
 #include "helper/Rect2.hpp"
 #include "helper/color/Color.hpp"
 #include "helper/vectors/Vector2.hpp"
 #include "input.hpp"
-#include "renderers/Renderer2D.hpp"
+#include "nodes/UI/StyleBox.hpp"
 #include "nodes/UI/Theme.hpp"
+#include "renderers/Renderer2D.hpp"
 #include "window.hpp"
 #include <algorithm>
 #include <cmath>
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 // Godot-style Layout Presets for Anchors and Offsets
 enum class LayoutPreset {
@@ -42,6 +46,30 @@ enum class MouseFilter {
   Ignore  // Ignores mouse events completely
 };
 
+// Container sizing behavior flags (inspired by Godot Control.SizeFlags)
+enum class SizeFlags {
+  ShrinkBegin = 0,
+  Fill = 1,
+  Expand = 2,
+  ExpandFill = 3,
+  ShrinkCenter = 4,
+  ShrinkEnd = 8
+};
+
+inline SizeFlags operator|(SizeFlags a, SizeFlags b) {
+  return static_cast<SizeFlags>(static_cast<int>(a) | static_cast<int>(b));
+}
+inline SizeFlags operator&(SizeFlags a, SizeFlags b) {
+  return static_cast<SizeFlags>(static_cast<int>(a) & static_cast<int>(b));
+}
+
+// Focus Mode for keyboard and gamepad navigation
+enum class FocusMode {
+  None = 0,
+  Click = 1,
+  All = 2
+};
+
 // Base UI Node (inspired by Godot Control) rendering in screen space on the Canvas layer.
 class Control : public Node {
 public:
@@ -49,6 +77,8 @@ public:
   Signal<> resized;
   Signal<> mouse_entered;
   Signal<> mouse_exited;
+  Signal<> focus_entered;
+  Signal<> focus_exited;
   Signal<const InputEvent &> gui_input;
 
   // Anchors (0.0 to 1.0 relative to parent Control or Viewport)
@@ -70,23 +100,82 @@ public:
   float rotation = 0.0f;
   Color modulate = Color::WHITE;
 
+  // Container Size Flags
+  SizeFlags sizeFlagsHorizontal = SizeFlags::Fill;
+  SizeFlags sizeFlagsVertical = SizeFlags::Fill;
+  float sizeFlagsStretchRatio = 1.0f;
+
   // Input, Focus & Theming
   MouseFilter mouseFilter = MouseFilter::Stop;
+  FocusMode focusMode = FocusMode::None;
   bool clipContents = false;
-  std::shared_ptr<Theme> theme = nullptr;
+  std::string tooltipText;
+  Ref<Theme> theme = nullptr;
 
   Control() : Node("Control") {}
   explicit Control(std::string nodeName) : Node(std::move(nodeName)) {}
   ~Control() override {
+    if (s_focusedControl == this) s_focusedControl = nullptr;
     removeModalOverlay(this);
   }
 
   void onDestroy() override {
+    if (s_focusedControl == this) s_focusedControl = nullptr;
     removeModalOverlay(this);
   }
 
+  // Focus Management
+  void grabFocus() {
+    if (focusMode == FocusMode::None) return;
+    if (s_focusedControl != this) {
+      if (s_focusedControl) s_focusedControl->focus_exited.emit();
+      s_focusedControl = this;
+      focus_entered.emit();
+    }
+  }
+
+  void releaseFocus() {
+    if (s_focusedControl == this) {
+      s_focusedControl = nullptr;
+      focus_exited.emit();
+    }
+  }
+
+  bool hasFocus() const {
+    return s_focusedControl == this;
+  }
+
+  static Control *getFocusedControl() {
+    return s_focusedControl;
+  }
+
+  // Tooltip
+  void setTooltipText(std::string text) { tooltipText = std::move(text); }
+  const std::string &getTooltipText() const { return tooltipText; }
+
+  // Theme Overrides
+  void addThemeColorOverride(const std::string &name, const Color &color) {
+    m_overrideColors[name] = color;
+  }
+
+  void addThemeConstantOverride(const std::string &name, int value) {
+    m_overrideConstants[name] = value;
+  }
+
+  void addThemeFontOverride(const std::string &name, Ref<Font> font) {
+    m_overrideFonts[name] = std::move(font);
+  }
+
+  void addThemeFontSizeOverride(const std::string &name, int size) {
+    m_overrideFontSizes[name] = size;
+  }
+
+  void addThemeStyleboxOverride(const std::string &name, Ref<StyleBox> styleBox) {
+    m_overrideStyleBoxes[name] = std::move(styleBox);
+  }
+
   // Resolves active theme (searches local theme, parent tree, or global default theme)
-  std::shared_ptr<Theme> getTheme() const {
+  Ref<Theme> getTheme() const {
     if (theme) return theme;
     Node *curr = getParent();
     while (curr) {
@@ -99,33 +188,53 @@ public:
 
   Color getThemeColor(const std::string &name, const std::string &nodeType = "",
                       const Color &fallback = Color::WHITE) const {
+    auto it = m_overrideColors.find(name);
+    if (it != m_overrideColors.end()) return it->second;
+
     auto activeTheme = getTheme();
     return activeTheme ? activeTheme->getColor(name, nodeType.empty() ? name : nodeType, fallback)
                        : fallback;
   }
 
-  std::shared_ptr<Font> getThemeFont(const std::string &name = "font",
-                                     const std::string &nodeType = "") const {
+  Ref<Font> getThemeFont(const std::string &name = "font",
+                         const std::string &nodeType = "") const {
+    auto it = m_overrideFonts.find(name);
+    if (it != m_overrideFonts.end()) return it->second;
+
     auto activeTheme = getTheme();
     return activeTheme ? activeTheme->getFont(name, nodeType) : Font::getDefaultFont();
   }
 
   int getThemeFontSize(const std::string &name = "font_size", const std::string &nodeType = "",
                        int fallback = 16) const {
+    auto it = m_overrideFontSizes.find(name);
+    if (it != m_overrideFontSizes.end()) return it->second;
+
     auto activeTheme = getTheme();
     return activeTheme ? activeTheme->getFontSize(name, nodeType, fallback) : fallback;
   }
 
   int getThemeConstant(const std::string &name, const std::string &nodeType = "",
                        int fallback = 0) const {
+    auto it = m_overrideConstants.find(name);
+    if (it != m_overrideConstants.end()) return it->second;
+
     auto activeTheme = getTheme();
     return activeTheme ? activeTheme->getConstant(name, nodeType, fallback) : fallback;
   }
 
-  std::shared_ptr<Texture2D> getThemeTexture(const std::string &name = "texture",
-                                             const std::string &nodeType = "") const {
+  Ref<Texture2D> getThemeTexture(const std::string &name = "texture",
+                                 const std::string &nodeType = "") const {
     auto activeTheme = getTheme();
     return activeTheme ? activeTheme->getTexture(name, nodeType) : nullptr;
+  }
+
+  Ref<StyleBox> getThemeStylebox(const std::string &name, const std::string &nodeType = "") const {
+    auto it = m_overrideStyleBoxes.find(name);
+    if (it != m_overrideStyleBoxes.end()) return it->second;
+
+    auto activeTheme = getTheme();
+    return activeTheme ? activeTheme->getStyleBox(name, nodeType) : nullptr;
   }
 
   // Sets anchors to a Godot Layout Preset
@@ -210,7 +319,7 @@ public:
     offsetBottom = pos.y + h;
   }
 
-  // Returns size of control
+  // Sizing & Positioning
   void setSize(const Vector2 &s) {
     offsetRight = offsetLeft + std::max(s.x, customMinimumSize.x);
     offsetBottom = offsetTop + std::max(s.y, customMinimumSize.y);
@@ -223,6 +332,8 @@ public:
   Vector2 getSize() const {
     return getGlobalRect().size;
   }
+
+
 
   // Gets parent's rectangle in screen space
   Rect2 getParentRect() const {
@@ -340,5 +451,12 @@ public:
 
 protected:
   bool m_isHovered = false;
+  std::unordered_map<std::string, Color> m_overrideColors;
+  std::unordered_map<std::string, int> m_overrideConstants;
+  std::unordered_map<std::string, Ref<Font>> m_overrideFonts;
+  std::unordered_map<std::string, int> m_overrideFontSizes;
+  std::unordered_map<std::string, Ref<StyleBox>> m_overrideStyleBoxes;
+
+  inline static Control *s_focusedControl = nullptr;
   inline static std::vector<OverlayItem> s_overlays;
 };

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/Memory.hpp"
 #include "nodes/UI/Control.hpp"
 #include "renderers/Texture2D.hpp"
 #include <memory>
@@ -15,7 +16,7 @@ enum class TextureRectStretchMode {
 // UI Texture Display Node (inspired by Godot TextureRect).
 class TextureRect : public Control {
 public:
-  std::shared_ptr<Texture2D> texture = nullptr;
+  Ref<Texture2D> texture = nullptr;
   TextureRectStretchMode stretchMode = TextureRectStretchMode::KeepAspectCentered;
   bool flipH = false;
   bool flipV = false;
@@ -24,7 +25,7 @@ public:
     mouseFilter = MouseFilter::Pass;
   }
 
-  explicit TextureRect(std::shared_ptr<Texture2D> tex)
+  explicit TextureRect(Ref<Texture2D> tex)
       : Control("TextureRect"), texture(std::move(tex)) {
     mouseFilter = MouseFilter::Pass;
   }
@@ -65,3 +66,4 @@ public:
     Renderer2D::drawTextureScreen(*texture, Rect2(), drawPos, drawSize, modulate);
   }
 };
+
