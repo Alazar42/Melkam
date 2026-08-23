@@ -9,7 +9,8 @@ class Marker2D : public Node2D {
 public:
   float gizmoExtents = 12.0f;
   Color gizmoColor = Color::from_rgba8(255, 75, 75, 220);
-  bool showGizmo = true;
+  bool showGizmo = false;
+
 
   Marker2D() : Node2D("Marker2D") {}
 

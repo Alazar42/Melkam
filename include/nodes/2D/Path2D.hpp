@@ -11,8 +11,9 @@
 class Path2D : public Node2D {
 public:
   Ref<Curve2D> curve = nullptr;
-  bool showDebug = true;
+  bool showDebug = false;
   Color debugColor = Color::from_rgba8(75, 180, 255, 180);
+
   float debugWidth = 2.0f;
 
   Path2D() : Node2D("Path2D") {

@@ -56,9 +56,9 @@ public:
 
     // 4. Ground Probe Sensor (RayCast2D)
     floorRay = addChild<RayCast2D>(Vector2(0.0f, 50.0f));
-    floorRay->showDebug = true;
 
     // 5. Camera2D Follow
+
     camera = addChild<Camera2D>();
     camera->makeCurrent();
   }
@@ -273,17 +273,10 @@ void GameScene::onReady() {
   moverSprite->size = {200.0f, 36.0f};
 
 
-  // Guide Polyline (Line2D)
-  auto guideLine = addChild<Line2D>();
-  guideLine->width = 3.0f;
-  guideLine->defaultColor = Color::from_rgba8(0, 230, 200, 140);
-  guideLine->addPoint({350.0f, 500.0f});
-  guideLine->addPoint({850.0f, 380.0f});
-  guideLine->addPoint({1400.0f, 480.0f});
-
   // Spawn Point Marker (Marker2D)
   auto spawnMarker = addChild<Marker2D>();
   spawnMarker->setPosition({300.0f, 300.0f});
+
 
   // Collectible Coins with PointLight2D & Particle Sparkles
   auto coin1 = addChild<CoinNode>();

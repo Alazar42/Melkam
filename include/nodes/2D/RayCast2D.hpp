@@ -15,8 +15,9 @@ public:
   bool enabled = true;
   bool hitFromInside = false;
   uint32_t collisionMask = 0xFFFFFFFF;
-  bool showDebug = true;
+  bool showDebug = false;
   Color debugHitColor = Color::from_rgba8(255, 60, 60, 220);
+
   Color debugMissColor = Color::from_rgba8(60, 220, 100, 200);
 
   RayCast2D() : Node2D("RayCast2D") {}
