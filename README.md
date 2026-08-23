@@ -20,17 +20,17 @@
 
 ## Current Status & Roadmap
 
-> **Note for Developers**: The **2D Engine is ready to use** and actively evolving with new features! It currently provides full 2D scene tree hierarchy, Box2D physics integration, canvas UI system, 9-slice rendering, theme inheritance, and subpixel font engines. Work on the **3D Engine will start soon**.
+> **Note for Developers**: The **2D Engine is ready to use** and actively expanding! It currently provides full SceneTree node hierarchies, 2D physics bodies with collision shapes, Canvas UI nodes with Theme subtree styling, 9-slice patch margins, and subpixel TrueType font rendering. Work on the **3D Engine will start soon**.
 
-## Key Features
+## Core Engine Architecture
 
-- **Godot-Inspired Node Hierarchy**: Flexible scene tree with `Node`, `Node2D`, `CanvasItem`, and `Control` bases.
-- **Type-Safe Signals & Slots**: Event-driven communication with lambda and member function slots.
-- **2D Physics Integration**: Rigid bodies, character bodies (`moveAndSlide`), static colliders, and area triggers powered by Box2D.
-- **Canvas UI & Theme Subsystem**: Comprehensive UI controls (`Button`, `Slider`, `OptionButton`, `ProgressBar`, `Panel`, `Label`, `TextureRect`) with Godot-style subtree theme inheritance.
-- **9-Slice & Textured UI**: Dynamic border patch slicing for scalable UI cards, dialog frames, and button skins.
-- **Subpixel Font Engine**: Crisp, multi-resolution TrueType font rendering with oversampled glyph packing.
-- **Hardware-Accelerated 2D Renderer**: Fast batch and immediate rendering powered by SDL3.
+- **SceneTree & Node Hierarchy**: Base `Node`, `Node2D`, `CanvasItem`, and `Control` classes with recursive `onReady`, `onProcess`, `onPhysicsProcess`, `onDraw`, and `onInput` lifecycles.
+- **Type-Safe Signals**: Godot-style `Signal<Args...>` event dispatching supporting lambda and member function slots.
+- **2D Physics Nodes (Box2D)**: `CharacterBody2D` (`moveAndSlide`), `RigidBody2D`, `StaticBody2D`, `Area2D`, and `CollisionShape2D` (box & circle shapes).
+- **Canvas UI & Theme Subsystem**: Full suite of `Control` nodes (`Button`, `HSlider`, `VSlider`, `OptionButton`, `ProgressBar`, `Panel`, `Label`, `TextureRect`, `BoxContainer`, `GridContainer`) driven by hierarchical `Theme` configurations.
+- **9-Slice Patch Textures**: Seamless UI skinning with configurable patch margins on `Panel` and `Button` nodes.
+- **Subpixel Font Engine**: Multi-resolution TrueType font rendering with oversampled glyph packing and fallback bitmap fonts.
+- **2D Hardware Rendering**: Immediate and batched screen/world drawing via `Renderer2D`, `Sprite2D`, `Texture2D`, and `Camera2D` on top of SDL3.
 
 ## License
 
