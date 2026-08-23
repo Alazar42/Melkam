@@ -77,6 +77,13 @@ public:
 
   Control() : Node("Control") {}
   explicit Control(std::string nodeName) : Node(std::move(nodeName)) {}
+  ~Control() override {
+    removeModalOverlay(this);
+  }
+
+  void onDestroy() override {
+    removeModalOverlay(this);
+  }
 
   // Resolves active theme (searches local theme, parent tree, or global default theme)
   std::shared_ptr<Theme> getTheme() const {

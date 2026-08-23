@@ -28,6 +28,17 @@ public:
     }
   }
 
+  void destroy() {
+    if (m_texture) {
+      SDL_DestroyTexture(m_texture);
+      m_texture = nullptr;
+    }
+    m_ranges.clear();
+    m_atlasWidth = 0;
+    m_atlasHeight = 0;
+    m_isTTF = false;
+  }
+
   ~Font() {
     destroy();
   }
@@ -294,15 +305,6 @@ public:
     if (s_defaultFont) {
       loadPlatformSystemFont(s_defaultFont.get());
     }
-  }
-
-  void destroy() {
-    if (m_texture) {
-      SDL_DestroyTexture(m_texture);
-      m_texture = nullptr;
-    }
-    m_ranges.clear();
-    m_isTTF = false;
   }
 
   bool isTTF() const { return m_isTTF; }
