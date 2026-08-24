@@ -35,12 +35,15 @@ struct Transform3DComponent {
       : localTransform(transform), globalTransform(transform) {}
 };
 
+#include "nodes/3D/StandardMaterial3D.hpp"
+
 // 3D Mesh Geometry Component
 struct Mesh3DComponent {
   std::vector<Vertex3D> vertices;
   std::vector<uint32_t> indices;
   AABB aabb;
   Color albedoColor = Color::WHITE;
+  Ref<StandardMaterial3D> material = nullptr;
   float roughness = 0.5f;
   float metallic = 0.0f;
   bool castShadow = true;

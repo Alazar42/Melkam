@@ -32,7 +32,7 @@ public:
   void onProcess(float delta) override;
 
 private:
-  Ref<Camera3D> m_camera = nullptr;
+  Ref<CameraController3D> m_camera = nullptr;
   Ref<MeshInstance3D> m_cube = nullptr;
   Ref<MeshInstance3D> m_sphere = nullptr;
   Ref<MeshInstance3D> m_plane = nullptr;
@@ -289,10 +289,11 @@ void MainMenuScene::onReady() {
 void Showcase3DScene::onReady() {
   std::cout << "=== [3D Vulkan Showcase] Scene Ready ===" << std::endl;
 
-  // 1. Camera3D Setup
-  m_camera = addChild<Camera3D>();
-  m_camera->setPosition(Vector3(0.0f, 3.5f, 7.0f));
-  m_camera->lookAt(Vector3(0.0f, 0.5f, 0.0f));
+  // 1. CameraController3D Setup (Interactive Orbit & Zoom)
+  m_camera = addChild<CameraController3D>();
+  m_camera->orbitDistance = 7.5f;
+  m_camera->targetPosition = Vector3(0.0f, 0.8f, 0.0f);
+  m_camera->updateOrbitTransform();
   m_camera->makeCurrent();
 
   // 2. Directional Sun Light & Point Light
@@ -305,20 +306,31 @@ void Showcase3DScene::onReady() {
   m_pointLight->lightColor = Color::CYAN;
   m_pointLight->lightRange = 20.0f;
 
-  // 3. Central 3D Cube MeshInstance3D
+  // 3. Central 3D Cube MeshInstance3D with StandardMaterial3D
+  auto goldMat = StandardMaterial3D::create(Color::GOLD);
+  goldMat->metallic = 0.8f;
+  goldMat->roughness = 0.2f;
+
   m_cube = addChild<MeshInstance3D>(Mesh3D::createBox(Vector3(1.6f, 1.6f, 1.6f)));
   m_cube->setPosition(Vector3(0.0f, 1.0f, 0.0f));
-  m_cube->setColor(Color::GOLD);
+  m_cube->setMaterial(goldMat);
 
-  // 4. Orbiting UV Sphere MeshInstance3D
+  // 4. Orbiting UV Sphere MeshInstance3D with StandardMaterial3D
+  auto aquaMat = StandardMaterial3D::create(Color::from_rgba8(80, 200, 255));
+  aquaMat->metallic = 0.4f;
+  aquaMat->roughness = 0.1f;
+
   m_sphere = addChild<MeshInstance3D>(Mesh3D::createSphere(0.55f, 20, 40));
   m_sphere->setPosition(Vector3(3.0f, 1.5f, 0.0f));
-  m_sphere->setColor(Color::from_rgba8(80, 200, 255));
+  m_sphere->setMaterial(aquaMat);
 
-  // 5. Ground Plane MeshInstance3D
-  m_plane = addChild<MeshInstance3D>(Mesh3D::createPlane(18.0f, 18.0f, 4, 4));
+  // 5. Godot Standard Ground Plane MeshInstance3D with StandardMaterial3D
+  auto floorMat = StandardMaterial3D::create(Color::from_rgba8(35, 42, 60));
+  floorMat->cullMode = CullMode3D::Disabled;
+
+  m_plane = addChild<MeshInstance3D>(Mesh3D::createPlane(Vector2(6.0f, 6.0f)));
   m_plane->setPosition(Vector3(0.0f, 0.0f, 0.0f));
-  m_plane->setColor(Color::from_rgba8(35, 40, 55));
+  m_plane->setMaterial(floorMat);
 
   // 6. UI HUD Overlay
   Vector2 vp = Window::getViewportSize();
@@ -327,26 +339,26 @@ void Showcase3DScene::onReady() {
 
   auto panel = overlay->addChild<Panel>();
   panel->setPosition({24.0f, 24.0f});
-  panel->setSize({380.0f, 220.0f});
+  panel->setSize({380.0f, 240.0f});
   panel->backgroundColor = Color::from_rgba8(18, 22, 34, 235);
   panel->borderColor = Color::from_rgba8(70, 90, 140);
   panel->borderWidth = 1.5f;
   panel->cornerRadius = 8.0f;
 
-  auto vbox = panel->addChild<VBoxContainer>(8.0f);
-  vbox->setPosition({16.0f, 16.0f});
-  vbox->setSize({348.0f, 188.0f});
+  auto vbox = panel->addChild<VBoxContainer>(7.0f);
+  vbox->setPosition({16.0f, 14.0f});
+  vbox->setSize({348.0f, 212.0f});
 
   vbox->addChild<Label>("3D VULKAN ENGINE SHOWCASE", 17.0f, Color::GOLD);
   vbox->addChild<Label>("• Architecture: Godot 4 Node3D + EnTT ECS", 12.0f, Color::from_rgba8(170, 190, 230));
   vbox->addChild<Label>("• Graphics: Vulkan + AMD VMA Memory Allocator", 12.0f, Color::from_rgba8(100, 230, 160));
-  vbox->addChild<Label>("• Spatial Math: Basis, Quaternion, Transform3D", 12.0f, Color::from_rgba8(170, 190, 230));
-  vbox->addChild<Label>("• Primitives: BoxMesh, UV SphereMesh, PlaneMesh", 12.0f, Color::from_rgba8(170, 190, 230));
+  vbox->addChild<Label>("• Materials: StandardMaterial3D (PBR Shading)", 12.0f, Color::from_rgba8(170, 190, 230));
+  vbox->addChild<Label>("• Controls: Drag Mouse to Orbit, Scroll to Zoom", 12.0f, Color::from_rgba8(255, 215, 80));
 
   vbox->addChild<HSeparator>();
 
   auto backBtn = vbox->addChild<Button>(IconType::ChevronLeft, "Return to Main Menu");
-  backBtn->customMinimumSize = {348.0f, 36.0f};
+  backBtn->customMinimumSize = {348.0f, 34.0f};
   backBtn->fontSize = 14.0f;
   backBtn->pressed.connect([this]() {
     std::cout << "=== Returning to Main Menu ===" << std::endl;

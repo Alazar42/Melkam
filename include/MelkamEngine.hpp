@@ -153,12 +153,25 @@
 #include "nodes/3D/Plane.hpp"
 #include "nodes/3D/Frustum.hpp"
 
-// 3D Spatial Nodes (Godot-Inspired)
+// 3D Materials & Shading
+#include "nodes/3D/StandardMaterial3D.hpp"
+
+// 3D Spatial Nodes & Cameras (Godot-Inspired)
 #include "nodes/3D/Node3D.hpp"
 #include "nodes/3D/Camera3D.hpp"
+#include "nodes/3D/CameraController3D.hpp"
+#include "nodes/3D/Marker3D.hpp"
+#include "nodes/3D/SpringArm3D.hpp"
 #include "nodes/3D/MeshInstance3D.hpp"
 #include "nodes/3D/DirectionalLight3D.hpp"
 #include "nodes/3D/PointLight3D.hpp"
+#include "nodes/3D/SpotLight3D.hpp"
+
+// 3D Collision Shapes & Raycasting (Godot-Inspired)
+#include "nodes/3D/physics/Shape3D.hpp"
+#include "nodes/3D/physics/BoxShape3D.hpp"
+#include "nodes/3D/physics/SphereShape3D.hpp"
+#include "nodes/3D/RayCast3D.hpp"
 
 // 3D Hardware Vulkan Renderer & ECS Systems
 #include "components/Components3D.hpp"

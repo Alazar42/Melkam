@@ -11,21 +11,18 @@
 #include <iostream>
 #include <vector>
 
-// Master 3D Rendering Subsystem with Hardware-Accelerated Projection, Shading & Depth Sorting
+// Master 3D Rendering Subsystem with Pixel-Accurate Z-Buffering & Incremental DDA Rasterization
 class Renderer3D {
 public:
   inline static const Camera3D *s_activeCamera = nullptr;
   inline static bool s_isRendering = false;
 
-  struct RenderTriangle3D {
-    SDL_Vertex vertices[3];
-    float avgDepth = 0.0f;
-  };
-
-  struct MeshBatch3D {
-    float sortDistance = 0.0f;
-    std::vector<RenderTriangle3D> triangles;
-  };
+  // Framebuffer & Depth Buffer
+  inline static SDL_Texture *s_framebufferTexture = nullptr;
+  inline static int s_fbWidth = 0;
+  inline static int s_fbHeight = 0;
+  inline static std::vector<uint32_t> s_colorBuffer;
+  inline static std::vector<float> s_depthBuffer;
 
   static void init(Window &window) {
     std::cout << "[MelkamEngine::Renderer3D] Initializing 3D Hardware Subsystem..." << std::endl;
@@ -33,6 +30,14 @@ public:
   }
 
   static void shutdown() {
+    if (s_framebufferTexture) {
+      SDL_DestroyTexture(s_framebufferTexture);
+      s_framebufferTexture = nullptr;
+    }
+    s_fbWidth = 0;
+    s_fbHeight = 0;
+    s_colorBuffer.clear();
+    s_depthBuffer.clear();
     RenderingDevice3D::get().shutdown();
   }
 
@@ -51,10 +56,34 @@ public:
     s_isRendering = false;
   }
 
-  // Processes ECS 3D view and renders all active visible 3D mesh instances
+  // Processes ECS 3D view and renders all active 3D meshes with Pixel-Accurate Z-Buffering
   static void render(float viewportWidth, float viewportHeight) {
     SDL_Renderer *sdlRenderer = Renderer2D::getRenderer();
     if (!sdlRenderer || viewportWidth <= 0.0f || viewportHeight <= 0.0f) return;
+
+    int w = static_cast<int>(viewportWidth);
+    int h = static_cast<int>(viewportHeight);
+
+    // 1. Manage Framebuffer Texture & Buffers
+    if (w != s_fbWidth || h != s_fbHeight || !s_framebufferTexture) {
+      if (s_framebufferTexture) {
+        SDL_DestroyTexture(s_framebufferTexture);
+      }
+      s_framebufferTexture = SDL_CreateTexture(sdlRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+      if (s_framebufferTexture) {
+        SDL_SetTextureBlendMode(s_framebufferTexture, SDL_BLENDMODE_BLEND);
+      }
+      s_fbWidth = w;
+      s_fbHeight = h;
+      s_colorBuffer.resize(w * h);
+      s_depthBuffer.resize(w * h);
+    }
+
+    if (!s_framebufferTexture || s_colorBuffer.empty()) return;
+
+    // Clear color (transparent) and depth buffer (0.0 = infinity for 1/z)
+    std::fill(s_colorBuffer.begin(), s_colorBuffer.end(), 0x00000000);
+    std::fill(s_depthBuffer.begin(), s_depthBuffer.end(), 0.0f);
 
     Systems3D::updateTransforms();
     Systems3D::updateCameras(viewportWidth, viewportHeight);
@@ -84,7 +113,7 @@ public:
       }
     }
 
-    // Camera parameters
+    // Camera projection parameters
     Transform3D viewInv = activeCamTransform.affine_inverse();
     float fovDeg = activeCamComp ? activeCamComp->fov : 75.0f;
     float fovRad = fovDeg * 3.14159265f / 180.0f;
@@ -106,7 +135,6 @@ public:
       dirLights.push_back({forward, l.color, l.energy});
     }
     if (dirLights.empty()) {
-      // Default ambient directional sun
       dirLights.push_back({Vector3(-0.5f, -0.8f, -0.4f).normalized(), Color::from_rgba8(255, 245, 230), 1.0f});
     }
 
@@ -125,9 +153,7 @@ public:
 
     Color ambientColor = Color::from_rgba8(50, 55, 75);
 
-    std::vector<MeshBatch3D> batches;
-
-    // Process each 3D Mesh in the ECS registry
+    // Rasterize each 3D Mesh in the ECS registry
     for (auto entity : meshView) {
       const auto &meshComp = meshView.get<Mesh3DComponent>(entity);
       const auto &transComp = meshView.get<Transform3DComponent>(entity);
@@ -136,16 +162,6 @@ public:
 
       Transform3D globalTrans = transComp.globalTransform;
       Basis normalBasis = globalTrans.basis.inverse().transposed();
-
-      MeshBatch3D batch{};
-      // Calculate object distance to camera for inter-object sorting
-      float distToCam = (globalTrans.origin - activeCamTransform.origin).length();
-      // Large floor / ground planes are classified as background layer
-      if (meshComp.aabb.size.x >= 10.0f || globalTrans.origin.y <= 0.05f) {
-        batch.sortDistance = distToCam + 1000.0f;
-      } else {
-        batch.sortDistance = distToCam;
-      }
 
       size_t indexCount = meshComp.indices.size();
       for (size_t i = 0; i + 2 < indexCount; i += 3) {
@@ -162,7 +178,7 @@ public:
         Vector3 faceNorm = (w1 - w0).cross(w2 - w0);
         Vector3 toCam = activeCamTransform.origin - w0;
         bool isBackFacing = (faceNorm.dot(toCam) < 0.0f);
-        if (isBackFacing && meshComp.cullBackfaces) continue; // Cull back-facing triangles on solid geometry
+        if (isBackFacing && meshComp.cullBackfaces) continue;
 
         // 3. Transform vertices to Camera View Space
         Vector3 cam0 = viewInv.xform(w0);
@@ -173,26 +189,26 @@ public:
         float z1 = -cam1.z;
         float z2 = -cam2.z;
 
-        // Skip triangle if completely behind near clipping plane
+        // Clip triangle if completely behind near clipping plane
         if (z0 <= nearPlane && z1 <= nearPlane && z2 <= nearPlane) continue;
 
-        // Clamp depth to nearPlane to avoid division by zero or negative depth
         float safeZ0 = std::max(z0, nearPlane);
         float safeZ1 = std::max(z1, nearPlane);
         float safeZ2 = std::max(z2, nearPlane);
 
+        float invZ0 = 1.0f / safeZ0;
+        float invZ1 = 1.0f / safeZ1;
+        float invZ2 = 1.0f / safeZ2;
+
         // 4. Screen Projection
-        Vector2 s0(
-            (cam0.x * f / aspect) / safeZ0 * (viewportWidth * 0.5f) + (viewportWidth * 0.5f),
-            (1.0f - (cam0.y * f) / safeZ0) * (viewportHeight * 0.5f));
+        float x0 = (cam0.x * f / aspect) * invZ0 * (viewportWidth * 0.5f) + (viewportWidth * 0.5f);
+        float y0 = (1.0f - (cam0.y * f) * invZ0) * (viewportHeight * 0.5f);
 
-        Vector2 s1(
-            (cam1.x * f / aspect) / safeZ1 * (viewportWidth * 0.5f) + (viewportWidth * 0.5f),
-            (1.0f - (cam1.y * f) / safeZ1) * (viewportHeight * 0.5f));
+        float x1 = (cam1.x * f / aspect) * invZ1 * (viewportWidth * 0.5f) + (viewportWidth * 0.5f);
+        float y1 = (1.0f - (cam1.y * f) * invZ1) * (viewportHeight * 0.5f);
 
-        Vector2 s2(
-            (cam2.x * f / aspect) / safeZ2 * (viewportWidth * 0.5f) + (viewportWidth * 0.5f),
-            (1.0f - (cam2.y * f) / safeZ2) * (viewportHeight * 0.5f));
+        float x2 = (cam2.x * f / aspect) * invZ2 * (viewportWidth * 0.5f) + (viewportWidth * 0.5f);
+        float y2 = (1.0f - (cam2.y * f) * invZ2) * (viewportHeight * 0.5f);
 
         // 5. Lighting Calculations
         Vector3 n0 = normalBasis.xform(v0.normal).normalized();
@@ -205,7 +221,7 @@ public:
           n2 = -n2;
         }
 
-        auto computeVertexColor = [&](const Vector3 &pos, const Vector3 &norm, const Color &baseCol) -> SDL_FColor {
+        auto computeVertexColor = [&](const Vector3 &pos, const Vector3 &norm, const Color &baseCol) -> Color {
           float totalR = ambientColor.r;
           float totalG = ambientColor.g;
           float totalB = ambientColor.b;
@@ -234,68 +250,81 @@ public:
           }
 
           Color finalCol = baseCol * meshComp.albedoColor * Color(totalR, totalG, totalB, 1.0f);
-          return SDL_FColor{
+          return Color(
               std::clamp(finalCol.r, 0.0f, 1.0f),
               std::clamp(finalCol.g, 0.0f, 1.0f),
               std::clamp(finalCol.b, 0.0f, 1.0f),
-              meshComp.albedoColor.a};
+              meshComp.albedoColor.a);
         };
 
-        SDL_FColor c0 = computeVertexColor(w0, n0, v0.color);
-        SDL_FColor c1 = computeVertexColor(w1, n1, v1.color);
-        SDL_FColor c2 = computeVertexColor(w2, n2, v2.color);
+        Color c0 = computeVertexColor(w0, n0, v0.color);
+        Color c1 = computeVertexColor(w1, n1, v1.color);
+        Color c2 = computeVertexColor(w2, n2, v2.color);
 
-        RenderTriangle3D tri{};
-        tri.vertices[0] = SDL_Vertex{{s0.x, s0.y}, c0, {v0.uv.x, v0.uv.y}};
-        tri.vertices[1] = SDL_Vertex{{s1.x, s1.y}, c1, {v1.uv.x, v1.uv.y}};
-        tri.vertices[2] = SDL_Vertex{{s2.x, s2.y}, c2, {v2.uv.x, v2.uv.y}};
-        tri.avgDepth = (safeZ0 + safeZ1 + safeZ2) * 0.3333333f;
+        // 6. Fast Incremental DDA Rasterizer with Perspective-Correct 1/Z Buffer
+        float denom = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2);
+        if (std::abs(denom) < 0.0001f) continue;
+        float invDenom = 1.0f / denom;
 
-        batch.triangles.push_back(tri);
-      }
+        int minX = std::max(0, static_cast<int>(std::floor(std::min({x0, x1, x2}))));
+        int maxX = std::min(w - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
+        int minY = std::max(0, static_cast<int>(std::floor(std::min({y0, y1, y2}))));
+        int maxY = std::min(h - 1, static_cast<int>(std::ceil(std::max({y0, y1, y2}))));
 
-      if (!batch.triangles.empty()) {
-        // Sort triangles within the mesh
-        std::sort(batch.triangles.begin(), batch.triangles.end(), [](const RenderTriangle3D &a, const RenderTriangle3D &b) {
-          return a.avgDepth > b.avgDepth;
-        });
-        batches.push_back(std::move(batch));
+        if (minX > maxX || minY > maxY) continue;
+
+        float dw0_dx = (y1 - y2) * invDenom;
+        float dw0_dy = (x2 - x1) * invDenom;
+        float dw1_dx = (y2 - y0) * invDenom;
+        float dw1_dy = (x0 - x2) * invDenom;
+
+        float startPX = static_cast<float>(minX) + 0.5f;
+        float startPY = static_cast<float>(minY) + 0.5f;
+
+        float row_w0 = ((y1 - y2) * (startPX - x2) + (x2 - x1) * (startPY - y2)) * invDenom;
+        float row_w1 = ((y2 - y0) * (startPX - x2) + (x0 - x2) * (startPY - y2)) * invDenom;
+
+        for (int py_i = minY; py_i <= maxY; ++py_i) {
+          int rowOffset = py_i * w;
+          float w0_b = row_w0;
+          float w1_b = row_w1;
+
+          for (int px_i = minX; px_i <= maxX; ++px_i) {
+            float w2_b = 1.0f - w0_b - w1_b;
+
+            if (w0_b >= 0.0f && w1_b >= 0.0f && w2_b >= 0.0f) {
+              float interpInvZ = w0_b * invZ0 + w1_b * invZ1 + w2_b * invZ2;
+              int pixelIdx = rowOffset + px_i;
+
+              if (interpInvZ > s_depthBuffer[pixelIdx]) {
+                s_depthBuffer[pixelIdx] = interpInvZ;
+
+                float r = w0_b * c0.r + w1_b * c1.r + w2_b * c2.r;
+                float g = w0_b * c0.g + w1_b * c1.g + w2_b * c2.g;
+                float b = w0_b * c0.b + w1_b * c1.b + w2_b * c2.b;
+                float a = w0_b * c0.a + w1_b * c1.a + w2_b * c2.a;
+
+                uint32_t a_byte = static_cast<uint32_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
+                uint32_t r_byte = static_cast<uint32_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
+                uint32_t g_byte = static_cast<uint32_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
+                uint32_t b_byte = static_cast<uint32_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
+
+                s_colorBuffer[pixelIdx] = (a_byte << 24) | (r_byte << 16) | (g_byte << 8) | b_byte;
+              }
+            }
+
+            w0_b += dw0_dx;
+            w1_b += dw1_dx;
+          }
+
+          row_w0 += dw0_dy;
+          row_w1 += dw1_dy;
+        }
       }
     }
 
-    if (batches.empty()) return;
-
-    // Sort batches by distance (farthest background objects first, then foreground models)
-    std::sort(batches.begin(), batches.end(), [](const MeshBatch3D &a, const MeshBatch3D &b) {
-      return a.sortDistance > b.sortDistance;
-    });
-
-    // Hardware Batch Draw Submission via SDL_RenderGeometry
-    std::vector<SDL_Vertex> batchVertices;
-    std::vector<int> batchIndices;
-
-    for (const auto &batch : batches) {
-      batchVertices.clear();
-      batchIndices.clear();
-      batchVertices.reserve(batch.triangles.size() * 3);
-      batchIndices.reserve(batch.triangles.size() * 3);
-
-      for (size_t t = 0; t < batch.triangles.size(); ++t) {
-        int baseIdx = static_cast<int>(batchVertices.size());
-        batchVertices.push_back(batch.triangles[t].vertices[0]);
-        batchVertices.push_back(batch.triangles[t].vertices[1]);
-        batchVertices.push_back(batch.triangles[t].vertices[2]);
-
-        batchIndices.push_back(baseIdx + 0);
-        batchIndices.push_back(baseIdx + 1);
-        batchIndices.push_back(baseIdx + 2);
-      }
-
-      if (!batchVertices.empty()) {
-        SDL_RenderGeometry(sdlRenderer, nullptr,
-                           batchVertices.data(), static_cast<int>(batchVertices.size()),
-                           batchIndices.data(), static_cast<int>(batchIndices.size()));
-      }
-    }
+    // 7. Blit Hardware-Accelerated 3D Framebuffer to Screen
+    SDL_UpdateTexture(s_framebufferTexture, nullptr, s_colorBuffer.data(), w * sizeof(uint32_t));
+    SDL_RenderTexture(sdlRenderer, s_framebufferTexture, nullptr, nullptr);
   }
 };

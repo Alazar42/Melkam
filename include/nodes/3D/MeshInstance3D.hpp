@@ -112,47 +112,59 @@ public:
   }
 
   // Generates a 3D Plane Mesh (horizontal grid, double-sided)
-  static Mesh3D createPlane(float width = 10.0f, float depth = 10.0f, uint32_t subdivX = 1, uint32_t subdivZ = 1) {
+  // Godot 4 standard PlaneMesh (size in XZ plane, normal pointing +Y)
+  static Mesh3D createPlane(const Vector2 &size = Vector2(8.0f, 8.0f)) {
     Mesh3D mesh;
-    float hw = width * 0.5f;
-    float hd = depth * 0.5f;
-    mesh.aabb = AABB(Vector3(-hw, 0.0f, -hd), Vector3(width, 0.01f, depth));
+    float hw = size.x * 0.5f;
+    float hd = size.y * 0.5f;
+    mesh.aabb = AABB(Vector3(-hw, -0.01f, -hd), Vector3(size.x, 0.02f, size.y));
 
-    for (uint32_t z = 0; z <= subdivZ; ++z) {
-      float v = static_cast<float>(z) / static_cast<float>(subdivZ);
-      float pz = -hd + depth * v;
+    mesh.vertices.push_back({Vector3(-hw, 0.0f, -hd), Vector3(0.0f, 1.0f, 0.0f), Vector2(0.0f, 0.0f)}); // 0 (TL)
+    mesh.vertices.push_back({Vector3(-hw, 0.0f,  hd), Vector3(0.0f, 1.0f, 0.0f), Vector2(0.0f, 1.0f)}); // 1 (BL)
+    mesh.vertices.push_back({Vector3( hw, 0.0f,  hd), Vector3(0.0f, 1.0f, 0.0f), Vector2(1.0f, 1.0f)}); // 2 (BR)
+    mesh.vertices.push_back({Vector3( hw, 0.0f, -hd), Vector3(0.0f, 1.0f, 0.0f), Vector2(1.0f, 0.0f)}); // 3 (TR)
 
-      for (uint32_t x = 0; x <= subdivX; ++x) {
-        float u = static_cast<float>(x) / static_cast<float>(subdivX);
-        float px = -hw + width * u;
+    // CCW Top Face
+    mesh.indices = {0, 1, 2, 0, 2, 3};
+    return mesh;
+  }
 
-        mesh.vertices.push_back({Vector3(px, 0.0f, pz), Vector3(0.0f, 1.0f, 0.0f), Vector2(u, v)});
-      }
-    }
+  // Godot 4 standard CylinderMesh
+  static Mesh3D createCylinder(float topRadius = 1.0f, float bottomRadius = 1.0f, float height = 2.0f, uint32_t radialSegments = 16) {
+    Mesh3D mesh;
+    float hh = height * 0.5f;
+    float maxR = std::max(topRadius, bottomRadius);
+    mesh.aabb = AABB(Vector3(-maxR, -hh, -maxR), Vector3(maxR * 2.0f, height, maxR * 2.0f));
 
-    for (uint32_t z = 0; z < subdivZ; ++z) {
-      for (uint32_t x = 0; x < subdivX; ++x) {
-        uint32_t i0 = z * (subdivX + 1) + x;
-        uint32_t i1 = (z + 1) * (subdivX + 1) + x;
-        uint32_t i2 = (z + 1) * (subdivX + 1) + (x + 1);
-        uint32_t i3 = z * (subdivX + 1) + (x + 1);
+    // Top and bottom rings
+    for (uint32_t i = 0; i < radialSegments; ++i) {
+      float theta = static_cast<float>(i) * 6.2831853f / static_cast<float>(radialSegments);
+      float nextTheta = static_cast<float>((i + 1) % radialSegments) * 6.2831853f / static_cast<float>(radialSegments);
 
-        // Top Face (CCW viewed from above)
-        mesh.indices.push_back(i0);
-        mesh.indices.push_back(i3);
-        mesh.indices.push_back(i2);
-        mesh.indices.push_back(i0);
-        mesh.indices.push_back(i2);
-        mesh.indices.push_back(i1);
+      float ct = std::cos(theta), st = std::sin(theta);
+      float cnt = std::cos(nextTheta), snt = std::sin(nextTheta);
 
-        // Bottom Face
-        mesh.indices.push_back(i0);
-        mesh.indices.push_back(i1);
-        mesh.indices.push_back(i2);
-        mesh.indices.push_back(i0);
-        mesh.indices.push_back(i2);
-        mesh.indices.push_back(i3);
-      }
+      // Side Quad
+      Vector3 t0(ct * topRadius, hh, st * topRadius);
+      Vector3 b0(ct * bottomRadius, -hh, st * bottomRadius);
+      Vector3 t1(cnt * topRadius, hh, snt * topRadius);
+      Vector3 b1(cnt * bottomRadius, -hh, snt * bottomRadius);
+
+      Vector3 n0 = Vector3(ct, 0.0f, st).normalized();
+      Vector3 n1 = Vector3(cnt, 0.0f, snt).normalized();
+
+      uint32_t base = static_cast<uint32_t>(mesh.vertices.size());
+      mesh.vertices.push_back({b0, n0, Vector2(0.0f, 0.0f)});
+      mesh.vertices.push_back({t0, n0, Vector2(0.0f, 1.0f)});
+      mesh.vertices.push_back({t1, n1, Vector2(1.0f, 1.0f)});
+      mesh.vertices.push_back({b1, n1, Vector2(1.0f, 0.0f)});
+
+      mesh.indices.push_back(base + 0);
+      mesh.indices.push_back(base + 1);
+      mesh.indices.push_back(base + 2);
+      mesh.indices.push_back(base + 0);
+      mesh.indices.push_back(base + 2);
+      mesh.indices.push_back(base + 3);
     }
 
     return mesh;
@@ -168,6 +180,7 @@ public:
   float metallic = 0.0f;
   bool castShadow = true;
   bool cullBackfaces = true;
+  Ref<StandardMaterial3D> material = nullptr;
 
   MeshInstance3D() : Node3D("MeshInstance3D") {
     setMesh(Mesh3D::createBox());
@@ -188,6 +201,7 @@ public:
       comp.roughness = roughness;
       comp.metallic = metallic;
       comp.cullBackfaces = cullBackfaces;
+      comp.material = material;
     }
   }
 
@@ -195,6 +209,40 @@ public:
     albedoColor = col;
     if (m_entity.isValid() && m_entity.hasComponent<Mesh3DComponent>()) {
       m_entity.getComponent<Mesh3DComponent>().albedoColor = col;
+    }
+  }
+
+  void setMaterial(const Ref<StandardMaterial3D> &mat) {
+    material = mat;
+    if (material) {
+      albedoColor = material->albedoColor;
+      roughness = material->roughness;
+      metallic = material->metallic;
+      cullBackfaces = (material->cullMode != CullMode3D::Disabled);
+    }
+    if (m_entity.isValid() && m_entity.hasComponent<Mesh3DComponent>()) {
+      auto &comp = m_entity.getComponent<Mesh3DComponent>();
+      comp.material = material;
+      comp.albedoColor = albedoColor;
+      comp.roughness = roughness;
+      comp.metallic = metallic;
+      comp.cullBackfaces = cullBackfaces;
+    }
+  }
+
+  Ref<StandardMaterial3D> getMaterial() const { return material; }
+
+  void setRoughness(float r) {
+    roughness = r;
+    if (m_entity.isValid() && m_entity.hasComponent<Mesh3DComponent>()) {
+      m_entity.getComponent<Mesh3DComponent>().roughness = r;
+    }
+  }
+
+  void setMetallic(float m) {
+    metallic = m;
+    if (m_entity.isValid() && m_entity.hasComponent<Mesh3DComponent>()) {
+      m_entity.getComponent<Mesh3DComponent>().metallic = m;
     }
   }
 
