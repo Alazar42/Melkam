@@ -101,6 +101,7 @@ public:
       }
     });
     Renderer2D::init(*m_window);
+    Renderer3D::init(*m_window);
     Audio::init();
     PhysicsServer2D::init();
 
@@ -136,6 +137,9 @@ public:
       m_window->clear();
       Renderer2D::begin();
 
+      // 3D Rendering Pass
+      Renderer3D::render(static_cast<float>(m_props.width), static_cast<float>(m_props.height));
+
       m_tree->draw(alpha);
       Systems2D::render();
       onRender();
@@ -148,6 +152,7 @@ public:
 
     onShutdown();
     PhysicsServer2D::shutdown();
+    Renderer3D::shutdown();
     Audio::shutdown();
   }
 

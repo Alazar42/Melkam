@@ -12,6 +12,9 @@ endif()
 find_package(EnTT REQUIRED)
 find_package(SDL3 REQUIRED)
 find_package(box2d REQUIRED)
+find_package(VulkanHeaders REQUIRED)
+find_package(VulkanMemoryAllocator REQUIRED)
+find_package(volk REQUIRED)
 
 add_executable(MelkamEngine
     src/main.cpp
@@ -19,7 +22,14 @@ add_executable(MelkamEngine
 )
 
 target_include_directories(MelkamEngine PUBLIC include include/helper)
-target_link_libraries(MelkamEngine PRIVATE EnTT::EnTT SDL3::SDL3 box2d::box2d)
+target_link_libraries(MelkamEngine PRIVATE
+    EnTT::EnTT
+    SDL3::SDL3
+    box2d::box2d
+    vulkan-headers::vulkan-headers
+    GPUOpen::VulkanMemoryAllocator
+    volk::volk
+)
 
 # Automatically bundle / copy project assets with the executable output
 add_custom_command(TARGET MelkamEngine POST_BUILD

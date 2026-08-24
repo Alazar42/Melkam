@@ -90,6 +90,12 @@ public:
                                         std::forward<Args>(args)...);
   }
 
+  // Gets an existing component of type T, or adds it in-place if not present (alias for getOrEmplace).
+  template <typename T, typename... Args>
+  decltype(auto) getOrAddComponent(Args &&...args) {
+    return getOrEmplace<T>(std::forward<Args>(args)...);
+  }
+
   // ==========================================
   // Component Retrieval (get / try_get)
   // ==========================================

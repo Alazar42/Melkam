@@ -27,9 +27,8 @@
 #include "physics/2D/Collision2D.hpp"
 #include "physics/2D/PhysicsServer2D.hpp"
 
-// Scene Management & Runtime Application
+// Scene Management
 #include "core/SceneTree.hpp"
-#include "core/Application.hpp"
 
 // Resource & Serialization System (Godot-Inspired Save/Load, .tscn, .tres, JSON, ConfigFile)
 #include "core/Resource.hpp"
@@ -146,5 +145,28 @@
 #include "components/Components2D.hpp"
 #include "systems/Systems2D.hpp"
 
+// 3D Math & Spatial Foundation (Godot-Inspired)
+#include "nodes/3D/Quaternion.hpp"
+#include "nodes/3D/Basis.hpp"
+#include "nodes/3D/Transform3D.hpp"
+#include "nodes/3D/AABB.hpp"
+#include "nodes/3D/Plane.hpp"
+#include "nodes/3D/Frustum.hpp"
 
+// 3D Spatial Nodes (Godot-Inspired)
+#include "nodes/3D/Node3D.hpp"
+#include "nodes/3D/Camera3D.hpp"
+#include "nodes/3D/MeshInstance3D.hpp"
+#include "nodes/3D/DirectionalLight3D.hpp"
+#include "nodes/3D/PointLight3D.hpp"
+
+// 3D Hardware Vulkan Renderer & ECS Systems
+#include "components/Components3D.hpp"
+#include "systems/Systems3D.hpp"
+#include "renderers/vulkan/VulkanContext.hpp"
+#include "renderers/vulkan/RenderingDevice3D.hpp"
+#include "renderers/Renderer3D.hpp"
+
+// Master Application / Game Engine Runtime Loop
+#include "core/Application.hpp"
 

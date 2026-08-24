@@ -12,3 +12,8 @@
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "helper/stb_truetype.h"
+
+#define VMA_IMPLEMENTATION
+#include <volk.h>
+#include <vk_mem_alloc.h>
+

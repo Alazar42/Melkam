@@ -25,6 +25,22 @@ public:
   void onReady() override;
 };
 
+class Showcase3DScene : public Node {
+public:
+  Showcase3DScene() : Node("Showcase3DScene") {}
+  void onReady() override;
+  void onProcess(float delta) override;
+
+private:
+  Ref<Camera3D> m_camera = nullptr;
+  Ref<MeshInstance3D> m_cube = nullptr;
+  Ref<MeshInstance3D> m_sphere = nullptr;
+  Ref<MeshInstance3D> m_plane = nullptr;
+  Ref<DirectionalLight3D> m_sunLight = nullptr;
+  Ref<PointLight3D> m_pointLight = nullptr;
+  float m_orbitAngle = 0.0f;
+};
+
 // =============================================================================
 // 2. GAMEPLAY ENTITIES (Player, Coins, Physics)
 // =============================================================================
@@ -201,26 +217,36 @@ void MainMenuScene::onReady() {
 
   // 1. Play Button
   auto playBtn = vbox->addChild<Button>(IconType::Play, "Play Platformer Game");
-  playBtn->customMinimumSize = {400.0f, 44.0f};
-  playBtn->fontSize = 17.0f;
+  playBtn->customMinimumSize = {400.0f, 42.0f};
+  playBtn->fontSize = 16.0f;
   playBtn->pressed.connect([this]() {
     std::cout << "=== Switching to Game Scene ===" << std::endl;
     getTree()->changeScene(makeRef<GameScene>());
   });
 
-  // 2. UI Simulation Button
+  // 2. 3D Vulkan Engine Showcase Button
+  auto showcase3DBtn = vbox->addChild<Button>(IconType::Play, "3D Vulkan Engine Showcase");
+  showcase3DBtn->customMinimumSize = {400.0f, 42.0f};
+  showcase3DBtn->fontSize = 16.0f;
+  showcase3DBtn->pressed.connect([this]() {
+    std::cout << "=== Switching to 3D Vulkan Showcase Scene ===" << std::endl;
+    getTree()->changeScene(makeRef<Showcase3DScene>());
+  });
+
+  // 3. UI Simulation Button
   auto uiBtn = vbox->addChild<Button>(IconType::Gear, "UI Simulation & Showcase");
-  uiBtn->customMinimumSize = {400.0f, 44.0f};
-  uiBtn->fontSize = 17.0f;
+  uiBtn->customMinimumSize = {400.0f, 42.0f};
+  uiBtn->fontSize = 16.0f;
   uiBtn->pressed.connect([this]() {
     std::cout << "=== Switching to UI Simulation Scene ===" << std::endl;
     getTree()->changeScene(makeRef<UISimulationScene>());
   });
 
-  // 3. About Dialog & Button
+  // 4. About Dialog & Button
   auto aboutDialog = addChild<AcceptDialog>(
       "MelkamEngine v1.0\n\n"
-      "• Scene Tree architecture with Node & CanvasItem hierarchy\n"
+      "• Scene Tree architecture with Node, Node2D & Node3D hierarchy\n"
+      "• 3D Engine Architecture: Camera3D, MeshInstance3D & Vulkan Pipeline\n"
       "• C++20 Coroutine & 'await' Async Scripting (Timers, Signals, Tweens)\n"
       "• Complete Godot-standard Canvas UI suite & StyleBoxes\n"
       "• Box2D 2D Physics Server & CharacterBody2D moveAndSlide\n"
@@ -229,13 +255,13 @@ void MainMenuScene::onReady() {
       "About MelkamEngine");
 
   auto aboutBtn = vbox->addChild<Button>(IconType::Info, "About MelkamEngine");
-  aboutBtn->customMinimumSize = {400.0f, 40.0f};
-  aboutBtn->fontSize = 15.0f;
+  aboutBtn->customMinimumSize = {400.0f, 38.0f};
+  aboutBtn->fontSize = 14.0f;
   aboutBtn->pressed.connect([aboutDialog]() {
-    if (aboutDialog) aboutDialog->popupCentered({500.0f, 280.0f});
+    if (aboutDialog) aboutDialog->popupCentered({520.0f, 300.0f});
   });
 
-  // 4. Quit Button & Confirmation
+  // 5. Quit Button & Confirmation
   auto quitDialog = addChild<ConfirmationDialog>("Are you sure you want to quit MelkamEngine?", "Confirm Quit");
   quitDialog->confirmed.connect([this]() {
     std::cout << "=== Quitting Application ===" << std::endl;
@@ -243,8 +269,8 @@ void MainMenuScene::onReady() {
   });
 
   auto quitBtn = vbox->addChild<Button>(IconType::Close, "Quit");
-  quitBtn->customMinimumSize = {400.0f, 40.0f};
-  quitBtn->fontSize = 15.0f;
+  quitBtn->customMinimumSize = {400.0f, 38.0f};
+  quitBtn->fontSize = 14.0f;
   quitBtn->pressed.connect([quitDialog]() {
     if (quitDialog) quitDialog->popupCentered({380.0f, 180.0f});
   });
@@ -254,6 +280,95 @@ void MainMenuScene::onReady() {
   // Link Button
   auto docLink = vbox->addChild<LinkButton>("Learn more on GitHub Documentation", "https://github.com/Alazar42/MelkamEngine");
   docLink->fontColor = Color::from_rgba8(80, 160, 255);
+}
+
+// =============================================================================
+// 4. 3D VULKAN SHOWCASE SCENE IMPLEMENTATION
+// =============================================================================
+
+void Showcase3DScene::onReady() {
+  std::cout << "=== [3D Vulkan Showcase] Scene Ready ===" << std::endl;
+
+  // 1. Camera3D Setup
+  m_camera = addChild<Camera3D>();
+  m_camera->setPosition(Vector3(0.0f, 3.5f, 7.0f));
+  m_camera->lookAt(Vector3(0.0f, 0.5f, 0.0f));
+  m_camera->makeCurrent();
+
+  // 2. Directional Sun Light & Point Light
+  m_sunLight = addChild<DirectionalLight3D>();
+  m_sunLight->lightColor = Color::from_rgba8(255, 245, 220);
+  m_sunLight->lightEnergy = 1.3f;
+
+  m_pointLight = addChild<PointLight3D>();
+  m_pointLight->setPosition(Vector3(0.0f, 3.0f, 0.0f));
+  m_pointLight->lightColor = Color::CYAN;
+  m_pointLight->lightRange = 20.0f;
+
+  // 3. Central 3D Cube MeshInstance3D
+  m_cube = addChild<MeshInstance3D>(Mesh3D::createBox(Vector3(1.6f, 1.6f, 1.6f)));
+  m_cube->setPosition(Vector3(0.0f, 1.0f, 0.0f));
+  m_cube->setColor(Color::GOLD);
+
+  // 4. Orbiting UV Sphere MeshInstance3D
+  m_sphere = addChild<MeshInstance3D>(Mesh3D::createSphere(0.55f, 20, 40));
+  m_sphere->setPosition(Vector3(3.0f, 1.5f, 0.0f));
+  m_sphere->setColor(Color::from_rgba8(80, 200, 255));
+
+  // 5. Ground Plane MeshInstance3D
+  m_plane = addChild<MeshInstance3D>(Mesh3D::createPlane(18.0f, 18.0f, 4, 4));
+  m_plane->setPosition(Vector3(0.0f, 0.0f, 0.0f));
+  m_plane->setColor(Color::from_rgba8(35, 40, 55));
+
+  // 6. UI HUD Overlay
+  Vector2 vp = Window::getViewportSize();
+  auto overlay = addChild<Control>("UIOverlay");
+  overlay->setSize(vp);
+
+  auto panel = overlay->addChild<Panel>();
+  panel->setPosition({24.0f, 24.0f});
+  panel->setSize({380.0f, 220.0f});
+  panel->backgroundColor = Color::from_rgba8(18, 22, 34, 235);
+  panel->borderColor = Color::from_rgba8(70, 90, 140);
+  panel->borderWidth = 1.5f;
+  panel->cornerRadius = 8.0f;
+
+  auto vbox = panel->addChild<VBoxContainer>(8.0f);
+  vbox->setPosition({16.0f, 16.0f});
+  vbox->setSize({348.0f, 188.0f});
+
+  vbox->addChild<Label>("3D VULKAN ENGINE SHOWCASE", 17.0f, Color::GOLD);
+  vbox->addChild<Label>("• Architecture: Godot 4 Node3D + EnTT ECS", 12.0f, Color::from_rgba8(170, 190, 230));
+  vbox->addChild<Label>("• Graphics: Vulkan + AMD VMA Memory Allocator", 12.0f, Color::from_rgba8(100, 230, 160));
+  vbox->addChild<Label>("• Spatial Math: Basis, Quaternion, Transform3D", 12.0f, Color::from_rgba8(170, 190, 230));
+  vbox->addChild<Label>("• Primitives: BoxMesh, UV SphereMesh, PlaneMesh", 12.0f, Color::from_rgba8(170, 190, 230));
+
+  vbox->addChild<HSeparator>();
+
+  auto backBtn = vbox->addChild<Button>(IconType::ChevronLeft, "Return to Main Menu");
+  backBtn->customMinimumSize = {348.0f, 36.0f};
+  backBtn->fontSize = 14.0f;
+  backBtn->pressed.connect([this]() {
+    std::cout << "=== Returning to Main Menu ===" << std::endl;
+    getTree()->changeScene(makeRef<MainMenuScene>());
+  });
+}
+
+void Showcase3DScene::onProcess(float delta) {
+  if (m_cube) {
+    m_cube->rotateY(1.2f * delta);
+    m_cube->rotateX(0.7f * delta);
+  }
+
+  if (m_sphere) {
+    m_orbitAngle += delta * 1.5f;
+    float radius = 3.2f;
+    m_sphere->setPosition(Vector3(
+        std::cos(m_orbitAngle) * radius,
+        1.2f + std::sin(m_orbitAngle * 2.0f) * 0.6f,
+        std::sin(m_orbitAngle) * radius));
+    m_sphere->rotateY(2.2f * delta);
+  }
 }
 
 // =============================================================================
