@@ -1,5 +1,5 @@
 #pragma once
-
+#include "core/Resource.hpp"
 #include "helper/Rect2.hpp"
 #include "helper/color/Color.hpp"
 #include "helper/nanosvg.h"
@@ -16,17 +16,22 @@
 #include <vector>
 
 // 2D Hardware GPU Texture representation with SVG/PNG/JPG/BMP/TGA decoding and deferred GPU loading.
-class Texture2D {
+class Texture2D : public Resource {
 public:
-  Texture2D() = default;
+  Texture2D() : Resource() {}
 
   // Constructs and loads a texture from an image file (SVG, PNG, JPG, BMP, TGA).
-  explicit Texture2D(const std::string &filePath, SDL_Renderer *renderer = nullptr) {
+  explicit Texture2D(const std::string &filePath, SDL_Renderer *renderer = nullptr)
+      : Resource(filePath) {
     loadFromFile(filePath, renderer);
   }
 
+  bool load(const std::string &path) override {
+    return loadFromFile(path, nullptr);
+  }
+
   // Destructor frees native SDL_Texture handle.
-  ~Texture2D() {
+  ~Texture2D() override {
     destroy();
   }
 

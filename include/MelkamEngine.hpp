@@ -15,6 +15,7 @@
 // Input, Time & Core Node
 #include "input.hpp"
 #include "time.hpp"
+#include "core/EventTracer.hpp"
 #include "core/Node.hpp"
 #include "core/Signal.hpp"
 #include "window.hpp"
@@ -28,6 +29,14 @@
 // Scene Management & Runtime Application
 #include "core/SceneTree.hpp"
 #include "core/Application.hpp"
+
+// Resource & Serialization System (Godot-Inspired Save/Load, .tscn, .tres, JSON, ConfigFile)
+#include "core/Resource.hpp"
+#include "core/ConfigFile.hpp"
+#include "core/JSON.hpp"
+#include "core/ProjectSettings.hpp"
+#include "scene/PackedScene.hpp"
+
 
 // 2D Spatial Nodes & Visuals
 #include "nodes/2D/Camera2D.hpp"

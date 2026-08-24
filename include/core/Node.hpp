@@ -148,6 +148,24 @@ public:
     }
   }
 
+  // Recursively saves physics transform state across the node hierarchy prior to fixed physics simulation step
+  virtual void savePhysicsTransformState() {
+    for (auto &child : m_children) {
+      if (child) {
+        child->savePhysicsTransformState();
+      }
+    }
+  }
+
+  // Recursively computes interpolated render transforms between previous and current physics states
+  virtual void interpolatePhysicsTransforms(float alpha) {
+    for (auto &child : m_children) {
+      if (child) {
+        child->interpolatePhysicsTransforms(alpha);
+      }
+    }
+  }
+
   // Recursively draws this node and all visible children.
   void drawTree() {
     if (!visible || !active) return;

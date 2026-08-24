@@ -91,6 +91,21 @@ public:
   }
 
 
+  // Saves physics transform state across all nodes before a fixed physics simulation step
+  void savePhysicsTransformState() {
+    flushPendingSceneChange();
+    if (m_root) {
+      m_root->savePhysicsTransformState();
+    }
+  }
+
+  // Interpolates physics transforms between simulation steps
+  void interpolatePhysicsTransforms(float alpha) {
+    if (m_root) {
+      m_root->interpolatePhysicsTransforms(alpha);
+    }
+  }
+
   // Processes fixed-timestep physics updates across all nodes in the tree.
   void physicsProcess(float delta) {
     flushPendingSceneChange();
@@ -100,12 +115,15 @@ public:
     flushPendingSceneChange();
   }
 
-  // Draws all visible nodes in the tree and deferred top-level UI popups/overlays.
-  void draw() {
+  // Draws all visible nodes in the tree with render transform interpolation and deferred UI overlays
+  void draw(float alpha = 1.0f) {
     flushPendingSceneChange();
     if (m_root) {
+      Node2D::s_inRenderPass = true;
+      m_root->interpolatePhysicsTransforms(alpha);
       m_root->drawTree();
       Control::renderOverlays();
+      Node2D::s_inRenderPass = false;
     }
   }
 

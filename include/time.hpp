@@ -88,16 +88,20 @@ public:
 
   // Returns true if enough time has accumulated to execute a fixed physics step.
   // Consumes one fixed step interval when true.
-  // Usage:
-  //   while (Time::shouldDoFixedUpdate()) {
-  //       physics.step(Time::getFixedDeltaTime());
-  //   }
   static bool shouldDoFixedUpdate() {
     if (s_fixedAccumulator >= s_fixedDeltaTime) {
       s_fixedAccumulator -= s_fixedDeltaTime;
       return true;
     }
     return false;
+  }
+
+  // Returns the physics interpolation alpha [0.0, 1.0) between the previous and current physics state.
+  // Used by the renderer to blend/interpolate positions between fixed timestep simulation ticks.
+  static float getPhysicsInterpolationAlpha() {
+    if (s_fixedDeltaTime <= 0.0f) return 1.0f;
+    float alpha = s_fixedAccumulator / s_fixedDeltaTime;
+    return std::clamp(alpha, 0.0f, 1.0f);
   }
 
 private:

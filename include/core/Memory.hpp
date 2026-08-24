@@ -95,3 +95,10 @@ template <typename T, typename U>
 constexpr Shared<T> dynamicSharedCast(const Shared<U> &s) {
   return std::dynamic_pointer_cast<T>(s);
 }
+
+// Godot-style RefCounted Base Object
+class RefCounted : public std::enable_shared_from_this<RefCounted> {
+public:
+  virtual ~RefCounted() = default;
+};
+

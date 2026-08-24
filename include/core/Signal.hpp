@@ -1,21 +1,29 @@
 #pragma once
 
+#include "core/EventTracer.hpp"
+#include "time.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 using ConnectionId = uint64_t;
 
-// Godot-style Type-Safe Signal / Slot System.
+// Godot-style Type-Safe Signal / Slot System with Frame-Number Stamping & Event Tracing.
+// Every emission is stamped with the exact engine frame count and timestamp from day one,
+// enabling post-mortem root-cause debugging for entity events and lifecycle changes.
 template <typename... Args>
 class Signal {
 public:
   using SlotType = std::function<void(Args...)>;
 
   Signal() = default;
+  explicit Signal(std::string name, std::string source = "")
+      : m_name(std::move(name)), m_source(std::move(source)) {}
   ~Signal() = default;
 
   // Non-copyable (signals belong to their enclosing object)
@@ -23,13 +31,41 @@ public:
   Signal &operator=(const Signal &) = delete;
 
   // Moveable
-  Signal(Signal &&other) noexcept : m_slots(std::move(other.m_slots)) {}
+  Signal(Signal &&other) noexcept
+      : m_slots(std::move(other.m_slots)),
+        m_name(std::move(other.m_name)),
+        m_source(std::move(other.m_source)),
+        m_lastEmissionFrame(other.m_lastEmissionFrame),
+        m_lastEmissionTime(other.m_lastEmissionTime),
+        m_emissionCount(other.m_emissionCount) {}
+
   Signal &operator=(Signal &&other) noexcept {
     if (this != &other) {
       m_slots = std::move(other.m_slots);
+      m_name = std::move(other.m_name);
+      m_source = std::move(other.m_source);
+      m_lastEmissionFrame = other.m_lastEmissionFrame;
+      m_lastEmissionTime = other.m_lastEmissionTime;
+      m_emissionCount = other.m_emissionCount;
     }
     return *this;
   }
+
+  // Sets debug name and source entity
+  void setName(std::string name) { m_name = std::move(name); }
+  const std::string &getName() const { return m_name; }
+
+  void setSource(std::string source) { m_source = std::move(source); }
+  const std::string &getSource() const { return m_source; }
+
+  // Returns the frame number when this signal was last emitted
+  uint64_t getLastEmissionFrame() const { return m_lastEmissionFrame; }
+
+  // Returns the timestamp (seconds) when this signal was last emitted
+  double getLastEmissionTime() const { return m_lastEmissionTime; }
+
+  // Returns total number of times this signal has been emitted
+  uint64_t getEmissionCount() const { return m_emissionCount; }
 
   // Connects a lambda or free function slot
   ConnectionId connect(SlotType slot) {
@@ -68,8 +104,22 @@ public:
     return false;
   }
 
-  // Emits the signal, invoking all connected slots with the given arguments
+  // Emits the signal, invoking all connected slots and stamping the frame number
   void emit(Args... args) const {
+    m_lastEmissionFrame = Time::getFrameCount();
+    m_lastEmissionTime = static_cast<double>(Time::getTime());
+    m_emissionCount++;
+
+    // Record into the central EventTracer journal if a name is configured or listeners exist
+    if (!m_name.empty() || !m_slots.empty()) {
+      EventTracer::record(m_name.empty() ? "Signal" : m_name,
+                          m_source,
+                          "",
+                          m_slots.size(),
+                          m_lastEmissionFrame,
+                          m_lastEmissionTime);
+    }
+
     // Copy slot list before iterating so handlers can safely disconnect during emission
     auto slotsCopy = m_slots;
     for (const auto &entry : slotsCopy) {
@@ -112,5 +162,11 @@ private:
   };
 
   std::vector<SlotEntry> m_slots;
+  std::string m_name;
+  std::string m_source;
+  mutable uint64_t m_lastEmissionFrame = 0;
+  mutable double m_lastEmissionTime = 0.0;
+  mutable uint64_t m_emissionCount = 0;
+
   inline static ConnectionId s_nextId = 0;
 };

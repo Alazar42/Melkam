@@ -121,6 +121,7 @@ public:
       // 1. Fixed Timestep Physics Cycle (Node Physics Process -> Box2D Simulation Step)
       while (Time::shouldDoFixedUpdate()) {
         float fixedDt = Time::getFixedDeltaTime();
+        m_tree->savePhysicsTransformState();
         m_tree->physicsProcess(fixedDt);
         PhysicsServer2D::step(fixedDt);
       }
@@ -130,11 +131,12 @@ public:
       Systems2D::updateMovement(dt);
       onUpdate(dt);
 
-      // 3. Render Pass
+      // 3. Render Pass with Subpixel Physics Transform Interpolation
+      float alpha = Time::getPhysicsInterpolationAlpha();
       m_window->clear();
       Renderer2D::begin();
 
-      m_tree->draw();
+      m_tree->draw(alpha);
       Systems2D::render();
       onRender();
 
