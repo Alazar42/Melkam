@@ -94,13 +94,23 @@ public:
 
 class CoinNode : public Area2D {
 public:
+  Task<void> playCollectAnimation() {
+    monitoring = false;
+    auto tween = getTree()->createTween();
+    tween->tweenProperty<Vector2>([this]() { return transform.scale; },
+                                 [this](Vector2 s) { transform.scale = s; },
+                                 Vector2(1.6f, 1.6f), 0.18f);
+    await tween;
+    visible = false;
+  }
+
   void onReady() override {
     auto colShape = addChild<CollisionShape2D>(18.0f);
     auto sprite = colShape->addChild<Sprite2D>("assets/sprites/coin.png");
     sprite->size = {36.0f, 36.0f};
 
     body_entered.connect([this](Node2D *body) {
-      if (body && body->name == "Player") {
+      if (body && body->name == "Player" && monitoring) {
         g_coinsCollected++;
         std::cout << "=== [SIGNAL FIRED] Coin collected! Total: " << g_coinsCollected << " ===" << std::endl;
 
@@ -111,8 +121,7 @@ public:
           g_progressBar->setValue(g_coinsCollected * (100.0f / 3.0f));
         }
 
-        visible = false;
-        monitoring = false;
+        startCoroutine(playCollectAnimation());
       }
     });
   }
@@ -138,6 +147,17 @@ private:
 
 
 // =============================================================================
+// Coroutine sequence demonstrating sequential awaits without blocking the main engine loop
+static Task<void> playMenuCoroutineSequence(Ref<Label> statusLabel) {
+  statusLabel->text = "[Coroutine] Initializing C++20 await...";
+  await WaitForSeconds(1.2f);
+  statusLabel->text = "[Coroutine] Timer elapsed! Awaiting 2.0s SceneTreeTimer...";
+  await SceneTree::getCurrent()->createTimer(2.0f);
+  statusLabel->text = "[Coroutine] NextPhysicsTick sync...";
+  await NextPhysicsTick{};
+  statusLabel->text = "[Coroutine] C++20 'await' System Fully Active!";
+}
+
 // 3. MAIN MENU SCENE IMPLEMENTATION
 // =============================================================================
 
@@ -155,16 +175,16 @@ void MainMenuScene::onReady() {
 
   // Main Menu Panel Card
   auto card = center->addChild<Panel>();
-  card->customMinimumSize = {460.0f, 480.0f};
+  card->customMinimumSize = {460.0f, 500.0f};
   card->backgroundColor = Color::from_rgba8(25, 29, 42, 245);
   card->borderColor = Color::from_rgba8(65, 80, 120);
   card->borderWidth = 1.5f;
   card->cornerRadius = 10.0f;
 
   // Card Layout Container
-  auto vbox = card->addChild<VBoxContainer>(14.0f);
-  vbox->setPosition({30.0f, 28.0f});
-  vbox->setSize({400.0f, 420.0f});
+  auto vbox = card->addChild<VBoxContainer>(12.0f);
+  vbox->setPosition({30.0f, 24.0f});
+  vbox->setSize({400.0f, 450.0f});
 
   // Engine Title
   auto titleLabel = vbox->addChild<Label>("MELKAM ENGINE", 28.0f, Color::GOLD);
@@ -173,11 +193,15 @@ void MainMenuScene::onReady() {
   auto subLabel = vbox->addChild<Label>("Godot-Inspired 2D/3D Game Engine in C++", 14.0f, Color::from_rgba8(140, 160, 200));
   subLabel->horizontalAlignment = HorizontalAlignment::Center;
 
+  auto coroutineLabel = vbox->addChild<Label>("[Coroutine] Active", 12.0f, Color::from_rgba8(100, 230, 160));
+  coroutineLabel->horizontalAlignment = HorizontalAlignment::Center;
+  startCoroutine(playMenuCoroutineSequence(coroutineLabel));
+
   vbox->addChild<HSeparator>();
 
   // 1. Play Button
   auto playBtn = vbox->addChild<Button>(IconType::Play, "Play Platformer Game");
-  playBtn->customMinimumSize = {400.0f, 46.0f};
+  playBtn->customMinimumSize = {400.0f, 44.0f};
   playBtn->fontSize = 17.0f;
   playBtn->pressed.connect([this]() {
     std::cout << "=== Switching to Game Scene ===" << std::endl;
@@ -186,7 +210,7 @@ void MainMenuScene::onReady() {
 
   // 2. UI Simulation Button
   auto uiBtn = vbox->addChild<Button>(IconType::Gear, "UI Simulation & Showcase");
-  uiBtn->customMinimumSize = {400.0f, 46.0f};
+  uiBtn->customMinimumSize = {400.0f, 44.0f};
   uiBtn->fontSize = 17.0f;
   uiBtn->pressed.connect([this]() {
     std::cout << "=== Switching to UI Simulation Scene ===" << std::endl;
@@ -197,6 +221,7 @@ void MainMenuScene::onReady() {
   auto aboutDialog = addChild<AcceptDialog>(
       "MelkamEngine v1.0\n\n"
       "• Scene Tree architecture with Node & CanvasItem hierarchy\n"
+      "• C++20 Coroutine & 'await' Async Scripting (Timers, Signals, Tweens)\n"
       "• Complete Godot-standard Canvas UI suite & StyleBoxes\n"
       "• Box2D 2D Physics Server & CharacterBody2D moveAndSlide\n"
       "• Flexible Signal / Slot reactive event system\n"
@@ -204,10 +229,10 @@ void MainMenuScene::onReady() {
       "About MelkamEngine");
 
   auto aboutBtn = vbox->addChild<Button>(IconType::Info, "About MelkamEngine");
-  aboutBtn->customMinimumSize = {400.0f, 42.0f};
+  aboutBtn->customMinimumSize = {400.0f, 40.0f};
   aboutBtn->fontSize = 15.0f;
   aboutBtn->pressed.connect([aboutDialog]() {
-    if (aboutDialog) aboutDialog->popupCentered({480.0f, 260.0f});
+    if (aboutDialog) aboutDialog->popupCentered({500.0f, 280.0f});
   });
 
   // 4. Quit Button & Confirmation
@@ -218,19 +243,17 @@ void MainMenuScene::onReady() {
   });
 
   auto quitBtn = vbox->addChild<Button>(IconType::Close, "Quit");
-  quitBtn->customMinimumSize = {400.0f, 42.0f};
+  quitBtn->customMinimumSize = {400.0f, 40.0f};
   quitBtn->fontSize = 15.0f;
   quitBtn->pressed.connect([quitDialog]() {
     if (quitDialog) quitDialog->popupCentered({380.0f, 180.0f});
   });
-
 
   vbox->addChild<HSeparator>();
 
   // Link Button
   auto docLink = vbox->addChild<LinkButton>("Learn more on GitHub Documentation", "https://github.com/Alazar42/MelkamEngine");
   docLink->fontColor = Color::from_rgba8(80, 160, 255);
-
 }
 
 // =============================================================================

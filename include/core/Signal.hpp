@@ -4,6 +4,7 @@
 #include "time.hpp"
 
 #include <algorithm>
+#include <coroutine>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -153,6 +154,31 @@ public:
   // Clears all connected slots
   void clear() {
     m_slots.clear();
+  }
+
+  // Coroutine Awaiter: enables 'await signal;' to pause execution until the signal fires
+  struct SignalAwaiter {
+    const Signal<Args...> &signal;
+    mutable ConnectionId connId = 0;
+    mutable std::coroutine_handle<> handle = nullptr;
+
+    bool await_ready() const noexcept { return false; }
+
+    void await_suspend(std::coroutine_handle<> h) const {
+      handle = h;
+      connId = const_cast<Signal<Args...> &>(signal).connect([this](Args...) {
+        const_cast<Signal<Args...> &>(signal).disconnect(connId);
+        if (handle && !handle.done()) {
+          handle.resume();
+        }
+      });
+    }
+
+    void await_resume() const noexcept {}
+  };
+
+  SignalAwaiter operator co_await() const {
+    return SignalAwaiter{*this};
   }
 
 private:

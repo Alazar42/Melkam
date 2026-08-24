@@ -18,6 +18,7 @@
 #include "core/EventTracer.hpp"
 #include "core/Node.hpp"
 #include "core/Signal.hpp"
+#include "core/Task.hpp"
 #include "window.hpp"
 #include "audio/Audio.hpp"
 #include "ECS.hpp"

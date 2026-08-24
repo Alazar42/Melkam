@@ -6,6 +6,7 @@
 #include "helper/vectors/Vector2.hpp"
 #include <algorithm>
 #include <cmath>
+#include <coroutine>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -326,6 +327,33 @@ public:
     return false;
   }
 
+  // Coroutine Awaiter: enables 'await *tween;' or 'await tween->finished;'
+  struct TweenAwaiter {
+    Tween &tween;
+    mutable ConnectionId connId = 0;
+    mutable std::coroutine_handle<> handle = nullptr;
+
+    bool await_ready() const noexcept {
+      return tween.isKilled() || !tween.isRunning();
+    }
+
+    void await_suspend(std::coroutine_handle<> h) const {
+      handle = h;
+      connId = tween.finished.connect([this]() {
+        tween.finished.disconnect(connId);
+        if (handle && !handle.done()) {
+          handle.resume();
+        }
+      });
+    }
+
+    void await_resume() const noexcept {}
+  };
+
+  TweenAwaiter operator co_await() {
+    return TweenAwaiter{*this};
+  }
+
 private:
   void addTweener(std::shared_ptr<Tweener> tweener) {
     if (m_parallel && !m_steps.empty()) {
@@ -345,3 +373,32 @@ private:
   int m_loops = 1;
   int m_loopsDone = 0;
 };
+
+// Enables direct awaiting on shared_ptr / Ref<Tween>: 'await getTree()->createTween()->...;'
+inline auto operator co_await(std::shared_ptr<Tween> tween) {
+  struct SharedTweenAwaiter {
+    std::shared_ptr<Tween> tween;
+    mutable ConnectionId connId = 0;
+    mutable std::coroutine_handle<> handle = nullptr;
+
+    bool await_ready() const noexcept {
+      return !tween || tween->isKilled() || !tween->isRunning();
+    }
+
+    void await_suspend(std::coroutine_handle<> h) const {
+      handle = h;
+      if (tween) {
+        connId = tween->finished.connect([this]() {
+          if (tween) tween->finished.disconnect(connId);
+          if (handle && !handle.done()) {
+            handle.resume();
+          }
+        });
+      }
+    }
+
+    void await_resume() const noexcept {}
+  };
+
+  return SharedTweenAwaiter{std::move(tween)};
+}

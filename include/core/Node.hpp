@@ -2,6 +2,7 @@
 
 #include "core/Memory.hpp"
 #include "core/Signal.hpp"
+#include "core/Task.hpp"
 #include "helper/vectors/Vector2.hpp"
 #include "input.hpp"
 #include <algorithm>
@@ -71,6 +72,25 @@ public:
   virtual void onDraw() {}
   virtual void onDestroy() {}
 
+  // Launches a coroutine whose lifetime is bound to this node.
+  // If this node is destroyed/removed, all active coroutines started via this helper are auto-cancelled.
+  void startCoroutine(Task<void> task) {
+    auto token = task.getAliveToken();
+    if (token) {
+      m_coroutineTokens.push_back(token);
+    }
+  }
+
+  // Cancels all active coroutines bound to this node
+  void stopAllCoroutines() {
+    for (auto &token : m_coroutineTokens) {
+      if (token) {
+        *token = false;
+      }
+    }
+    m_coroutineTokens.clear();
+  }
+
   // Attaches an existing child node to this node.
   std::shared_ptr<Node> addChild(std::shared_ptr<Node> child) {
     if (!child || child.get() == this) return nullptr;
@@ -98,6 +118,7 @@ public:
   void removeChild(const std::shared_ptr<Node> &child) {
     auto it = std::find(m_children.begin(), m_children.end(), child);
     if (it != m_children.end()) {
+      (*it)->stopAllCoroutines();
       (*it)->onDestroy();
       (*it)->m_parent = nullptr;
       m_children.erase(it);
@@ -108,6 +129,7 @@ public:
   void removeAllChildren() {
     for (auto &child : m_children) {
       if (child) {
+        child->stopAllCoroutines();
         child->onDestroy();
         child->m_parent = nullptr;
       }
@@ -221,4 +243,5 @@ public:
 private:
   Node *m_parent = nullptr;
   std::vector<std::shared_ptr<Node>> m_children;
+  std::vector<std::shared_ptr<bool>> m_coroutineTokens;
 };

@@ -2,6 +2,7 @@
 
 #include "animation/Tween.hpp"
 #include "core/Node.hpp"
+#include "core/Task.hpp"
 #include "input.hpp"
 #include "nodes/2D/Camera2D.hpp"
 #include "nodes/UI/Control.hpp"
@@ -35,6 +36,12 @@ public:
     return tween;
   }
 
+  // Creates and registers a new Godot-style SceneTreeTimer (like Godot 4 get_tree().create_timer(1.5))
+  // Can be awaited directly: 'await getTree()->createTimer(1.5f);'
+  std::shared_ptr<SceneTreeTimer> createTimer(float seconds) {
+    return std::make_shared<SceneTreeTimer>(seconds);
+  }
+
   // Changes the active scene by replacing the scene root node (deferred to frame boundary like Godot).
   void changeScene(std::shared_ptr<Node> newRoot) {
     m_pendingScene = std::move(newRoot);
@@ -52,6 +59,7 @@ public:
       Control::clearAllOverlays();
       Camera2D::clearCurrentCamera();
       m_tweens.clear();
+      CoroutineScheduler::get().clear();
 
       if (m_root) {
         m_root->onDestroy();
@@ -69,11 +77,14 @@ public:
     std::exit(0);
   }
 
-  // Processes per-frame updates across all nodes in the tree and active tweens.
+  // Processes per-frame updates across all nodes in the tree, active tweens, and coroutines.
   void process(float delta) {
     flushPendingSceneChange();
 
-    // Process active tweens
+    // 1. Process active coroutine timers and awaiters
+    CoroutineScheduler::get().process(delta);
+
+    // 2. Process active tweens
     for (auto it = m_tweens.begin(); it != m_tweens.end();) {
       if (auto &t = *it) {
         if (t->process(delta) || t->isKilled()) {
@@ -84,6 +95,7 @@ public:
       ++it;
     }
 
+    // 3. Process active node tree
     if (m_root) {
       m_root->updateTree(delta);
     }
@@ -106,9 +118,14 @@ public:
     }
   }
 
-  // Processes fixed-timestep physics updates across all nodes in the tree.
+  // Processes fixed-timestep physics updates across all nodes in the tree and physics awaiters.
   void physicsProcess(float delta) {
     flushPendingSceneChange();
+
+    // 1. Process active physics tick awaiters
+    CoroutineScheduler::get().physicsProcess(delta);
+
+    // 2. Process active node physics
     if (m_root) {
       m_root->physicsUpdateTree(delta);
     }
