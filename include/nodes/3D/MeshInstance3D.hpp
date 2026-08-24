@@ -293,5 +293,12 @@ public:
     }
   }
 
+  void setCastShadowsSetting(ShadowCastingSetting3D setting) {
+    castShadow = setting;
+    if (m_entity.isValid() && m_entity.hasComponent<Mesh3DComponent>()) {
+      m_entity.getComponent<Mesh3DComponent>().castShadow = (setting != ShadowCastingSetting3D::Off);
+    }
+  }
+
   AABB getAABB() const { return mesh.aabb; }
 };

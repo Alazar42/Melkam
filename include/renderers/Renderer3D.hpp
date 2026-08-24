@@ -18,6 +18,10 @@ public:
   inline static const Camera3D *s_activeCamera = nullptr;
   inline static bool s_isRendering = false;
 
+  // Shadow Map Buffer (Godot 4 Directional Shadow Mapping)
+  inline static const int SHADOW_MAP_SIZE = 512;
+  inline static std::vector<float> s_shadowDepthBuffer;
+
   // Framebuffer & Depth Buffer
   inline static SDL_Texture *s_framebufferTexture = nullptr;
   inline static int s_fbWidth = 0;
@@ -39,6 +43,7 @@ public:
     s_fbHeight = 0;
     s_colorBuffer.clear();
     s_depthBuffer.clear();
+    s_shadowDepthBuffer.clear();
     RenderingDevice3D::get().shutdown();
   }
 
@@ -57,7 +62,7 @@ public:
     s_isRendering = false;
   }
 
-  // Renders all ECS 3D meshes with Pixel-Accurate Z-Buffering (No disappearing geometry)
+  // Renders all ECS 3D meshes with Pixel-Accurate Z-Buffering & Real-Time Directional Shadows
   static void render(float viewportWidth, float viewportHeight) {
     SDL_Renderer *sdlRenderer = Renderer2D::getRenderer();
     if (!sdlRenderer || viewportWidth <= 0.0f || viewportHeight <= 0.0f) return;
@@ -155,16 +160,19 @@ public:
       Vector3 dir;
       Color color;
       float energy;
+      bool castShadows;
+      float shadowBias;
+      float shadowOpacity;
     };
     std::vector<DirLightData> dirLights;
     for (auto e : dirLightView) {
       const auto &l = dirLightView.get<DirectionalLight3DComponent>(e);
       const auto &t = dirLightView.get<Transform3DComponent>(e);
       Vector3 forward = t.globalTransform.basis.xform(l.direction).normalized();
-      dirLights.push_back({forward, l.color, l.energy});
+      dirLights.push_back({forward, l.color, l.energy, l.castShadows, l.shadowBias, l.shadowOpacity});
     }
     if (dirLights.empty()) {
-      dirLights.push_back({Vector3(-0.5f, -0.8f, -0.4f).normalized(), Color::from_rgba8(255, 245, 230), 1.3f});
+      dirLights.push_back({Vector3(-0.5f, -0.8f, -0.4f).normalized(), Color::from_rgba8(255, 245, 230), 1.3f, false, 0.05f, 0.75f});
     }
 
     struct PointLightData {
@@ -178,6 +186,116 @@ public:
       const auto &l = pointLightView.get<PointLight3DComponent>(e);
       const auto &t = pointLightView.get<Transform3DComponent>(e);
       pointLights.push_back({t.globalTransform.origin, l.color, l.energy, l.range});
+    }
+
+    // 4. Directional Shadow Map Generation (Zero-Cost When Disabled)
+    bool hasActiveShadows = false;
+    Vector3 sunDir = dirLights[0].dir.normalized();
+    Vector3 lightForward = -sunDir;
+    Vector3 up = (std::abs(lightForward.y) > 0.95f) ? Vector3(0.0f, 0.0f, 1.0f) : Vector3(0.0f, 1.0f, 0.0f);
+    Vector3 lightRight = up.cross(lightForward).normalized();
+    Vector3 lightUp = lightForward.cross(lightRight).normalized();
+
+    Vector3 sceneCenter = activeCamTransform.origin;
+    sceneCenter.y = 0.0f; // Center shadow frustum on ground level
+    Vector3 lightEye = sceneCenter - sunDir * 35.0f;
+
+    auto worldToLightSpace = [&](const Vector3 &p) -> Vector3 {
+      Vector3 rel = p - lightEye;
+      return Vector3(rel.dot(lightRight), rel.dot(lightUp), rel.dot(lightForward));
+    };
+
+    float orthoExtents = 18.0f;
+    float nearD = 1.0f;
+    float farD = 70.0f;
+    float lightScale = static_cast<float>(SHADOW_MAP_SIZE) / (orthoExtents * 2.0f);
+    float halfSM = static_cast<float>(SHADOW_MAP_SIZE) * 0.5f;
+
+    auto lightToScreen = [&](const Vector3 &lp) -> Vector3 {
+      float sx = lp.x * lightScale + halfSM;
+      float sy = -lp.y * lightScale + halfSM;
+      float sz = (lp.z - nearD) / (farD - nearD);
+      return Vector3(sx, sy, sz);
+    };
+
+    for (const auto &dl : dirLights) {
+      if (dl.castShadows) {
+        hasActiveShadows = true;
+        break;
+      }
+    }
+
+    if (hasActiveShadows) {
+      if (s_shadowDepthBuffer.size() != static_cast<size_t>(SHADOW_MAP_SIZE * SHADOW_MAP_SIZE)) {
+        s_shadowDepthBuffer.resize(SHADOW_MAP_SIZE * SHADOW_MAP_SIZE);
+      }
+      std::fill(s_shadowDepthBuffer.begin(), s_shadowDepthBuffer.end(), 1.0f);
+
+      // Rasterize all shadow-casting meshes into shadow map
+      for (auto entity : meshView) {
+        const auto &meshComp = meshView.get<Mesh3DComponent>(entity);
+        const auto &transComp = meshView.get<Transform3DComponent>(entity);
+
+        if (!meshComp.visible || !meshComp.castShadow || meshComp.vertices.empty()) continue;
+
+        Transform3D globalTrans = transComp.globalTransform;
+        size_t indexCount = meshComp.indices.size();
+        for (size_t i = 0; i + 2 < indexCount; i += 3) {
+          Vector3 w0 = globalTrans.xform(meshComp.vertices[meshComp.indices[i]].position);
+          Vector3 w1 = globalTrans.xform(meshComp.vertices[meshComp.indices[i + 1]].position);
+          Vector3 w2 = globalTrans.xform(meshComp.vertices[meshComp.indices[i + 2]].position);
+
+          Vector3 l0 = lightToScreen(worldToLightSpace(w0));
+          Vector3 l1 = lightToScreen(worldToLightSpace(w1));
+          Vector3 l2 = lightToScreen(worldToLightSpace(w2));
+
+          float denom = (l1.y - l2.y) * (l0.x - l2.x) + (l2.x - l1.x) * (l0.y - l2.y);
+          if (std::abs(denom) < 0.0001f) continue;
+          float invDenom = 1.0f / denom;
+
+          int minY = std::max(0, static_cast<int>(std::floor(std::min({l0.y, l1.y, l2.y}))));
+          int maxY = std::min(SHADOW_MAP_SIZE - 1, static_cast<int>(std::ceil(std::max({l0.y, l1.y, l2.y}))));
+          if (minY > maxY) continue;
+
+          float dZ_dx = ((l0.z - l2.z) * (l1.y - l2.y) + (l1.z - l2.z) * (l2.y - l0.y)) * invDenom;
+
+          for (int py = minY; py <= maxY; ++py) {
+            float curY = static_cast<float>(py) + 0.5f;
+            float xA = 0.0f, xB = 0.0f;
+            bool hasA = false, hasB = false;
+            auto checkE = [&](float ax, float ay, float bx, float by) {
+              if ((ay <= curY && by > curY) || (by <= curY && ay > curY)) {
+                float t = (curY - ay) / (by - ay);
+                float ix = ax + t * (bx - ax);
+                if (!hasA) { xA = ix; hasA = true; }
+                else { xB = ix; hasB = true; }
+              }
+            };
+            checkE(l0.x, l0.y, l1.x, l1.y);
+            checkE(l1.x, l1.y, l2.x, l2.y);
+            checkE(l2.x, l2.y, l0.x, l0.y);
+
+            if (!hasA || !hasB) continue;
+            if (xA > xB) std::swap(xA, xB);
+            int startX = std::max(0, static_cast<int>(std::ceil(xA)));
+            int endX = std::min(SHADOW_MAP_SIZE - 1, static_cast<int>(std::floor(xB)));
+            if (startX > endX) continue;
+
+            float startPX = static_cast<float>(startX) + 0.5f;
+            float w0 = ((l1.y - l2.y) * (startPX - l2.x) + (l2.x - l1.x) * (curY - l2.y)) * invDenom;
+            float w1 = ((l2.y - l0.y) * (startPX - l2.x) + (l0.x - l2.x) * (curY - l2.y)) * invDenom;
+            float curZ = l2.z + w0 * (l0.z - l2.z) + w1 * (l1.z - l2.z);
+
+            float *smRow = &s_shadowDepthBuffer[py * SHADOW_MAP_SIZE];
+            for (int px = startX; px <= endX; ++px) {
+              if (curZ < smRow[px]) {
+                smRow[px] = curZ;
+              }
+              curZ += dZ_dx;
+            }
+          }
+        }
+      }
     }
 
     struct GlowingHalo {
@@ -260,7 +378,7 @@ public:
         float x2 = (cam2.x * f / aspect) * invZ2 * halfW + halfW;
         float y2 = (1.0f - (cam2.y * f) * invZ2) * halfH;
 
-        // 5. Lighting Calculations
+        // 5. Normal & Lighting Calculations
         Vector3 n0 = normalBasis.xform(v0.normal).normalized();
         Vector3 n1 = normalBasis.xform(v1.normal).normalized();
         Vector3 n2 = normalBasis.xform(v2.normal).normalized();
@@ -271,12 +389,35 @@ public:
           float totalG = ambientColor.g;
           float totalB = ambientColor.b;
 
-          // Directional Sun Lights
+          // Directional Sun Lights with Soft PCF Shadows
           for (const auto &dl : dirLights) {
             float ndotl = std::max(0.0f, norm.dot(-dl.dir));
-            totalR += dl.color.r * dl.energy * ndotl;
-            totalG += dl.color.g * dl.energy * ndotl;
-            totalB += dl.color.b * dl.energy * ndotl;
+            if (ndotl > 0.001f) {
+              float shadowMult = 1.0f;
+              if (dl.castShadows && hasActiveShadows) {
+                Vector3 biasedPos = pos + norm * dl.shadowBias;
+                Vector3 smCoord = lightToScreen(worldToLightSpace(biasedPos));
+                int smX = static_cast<int>(smCoord.x);
+                int smY = static_cast<int>(smCoord.y);
+
+                if (smX >= 1 && smX < SHADOW_MAP_SIZE - 1 && smY >= 1 && smY < SHADOW_MAP_SIZE - 1) {
+                  float testZ = smCoord.z - 0.003f;
+                  float shadowHits = 0.0f;
+                  for (int dy = -1; dy <= 1; ++dy) {
+                    const float *smRow = &s_shadowDepthBuffer[(smY + dy) * SHADOW_MAP_SIZE];
+                    for (int dx = -1; dx <= 1; ++dx) {
+                      if (testZ > smRow[smX + dx]) {
+                        shadowHits += 1.0f;
+                      }
+                    }
+                  }
+                  shadowMult = 1.0f - (shadowHits / 9.0f) * dl.shadowOpacity;
+                }
+              }
+              totalR += dl.color.r * dl.energy * ndotl * shadowMult;
+              totalG += dl.color.g * dl.energy * ndotl * shadowMult;
+              totalB += dl.color.b * dl.energy * ndotl * shadowMult;
+            }
           }
 
           // Omni Point Lights

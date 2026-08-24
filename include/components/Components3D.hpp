@@ -84,7 +84,9 @@ struct DirectionalLight3DComponent {
   Color color = Color::WHITE;
   float energy = 1.0f;
   Vector3 direction{-0.5f, -1.0f, -0.5f};
-  bool castShadows = true;
+  bool castShadows = false;
+  float shadowBias = 0.05f;
+  float shadowOpacity = 0.75f;
 
   DirectionalLight3DComponent() = default;
 };

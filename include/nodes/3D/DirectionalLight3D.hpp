@@ -17,6 +17,8 @@ public:
       comp.color = lightColor;
       comp.energy = lightEnergy;
       comp.castShadows = shadowEnabled;
+      comp.shadowBias = shadowBias;
+      comp.shadowOpacity = shadowOpacity;
       comp.direction = getGlobalTransform().basis.xform(Vector3(0.0f, 0.0f, -1.0f)).normalized();
     }
   }
@@ -26,5 +28,8 @@ private:
     auto &comp = m_entity.getOrAddComponent<DirectionalLight3DComponent>();
     comp.color = lightColor;
     comp.energy = lightEnergy;
+    comp.castShadows = shadowEnabled;
+    comp.shadowBias = shadowBias;
+    comp.shadowOpacity = shadowOpacity;
   }
 };

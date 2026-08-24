@@ -10,6 +10,10 @@ public:
   float lightIndirectEnergy = 1.0f;
   float lightSpecular = 0.5f;
   bool shadowEnabled = false;
+  float shadowBias = 0.05f;
+  float shadowNormalBias = 1.0f;
+  float shadowOpacity = 0.75f;
+  float shadowBlur = 1.0f;
 
   Light3D() : VisualInstance3D("Light3D") {}
   explicit Light3D(std::string name) : VisualInstance3D(std::move(name)) {}
@@ -22,4 +26,6 @@ public:
 
   void setShadow(bool enabled) { shadowEnabled = enabled; }
   bool hasShadow() const { return shadowEnabled; }
+  void setShadowEnabled(bool enabled) { shadowEnabled = enabled; }
+  bool isShadowEnabled() const { return shadowEnabled; }
 };

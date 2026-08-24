@@ -59,6 +59,7 @@ private:
   Ref<Label> m_cameraInfoLabel = nullptr;
   Ref<Label> m_mouseModeLabel = nullptr;
   Ref<Label> m_coinCountLabel = nullptr;
+  Ref<Label> m_shadowStatusLabel = nullptr;
 
   // 3D Glowing Coins
   struct Coin3D {
@@ -335,6 +336,9 @@ void Showcase3DScene::onReady() {
   m_sunLight = addChild<DirectionalLight3D>();
   m_sunLight->lightColor = Color::from_rgba8(255, 245, 220);
   m_sunLight->lightEnergy = 1.3f;
+  m_sunLight->setShadow(true);
+  m_sunLight->shadowBias = 0.06f;
+  m_sunLight->shadowOpacity = 0.80f;
 
   m_omniLight = addChild<OmniLight3D>();
   m_omniLight->setPosition(Vector3(0.0f, 4.0f, 0.0f));
@@ -374,6 +378,7 @@ void Showcase3DScene::onReady() {
 
   m_playerMesh = m_player->addChild<MeshInstance3D>(BoxMesh::create(Vector3(0.8f, 1.8f, 0.8f)));
   m_playerMesh->setMaterial(heroMat);
+  m_playerMesh->setCastShadowsSetting(ShadowCastingSetting3D::On);
 
   // 5. SpringArm3D Attached to Player at Head/Shoulder Height
   m_springArm = m_player->addChild<SpringArm3D>();
@@ -397,6 +402,7 @@ void Showcase3DScene::onReady() {
   crate->addChild<CollisionShape3D>(std::make_shared<BoxShape3D>(Vector3(1.8f, 1.2f, 1.8f)));
   auto crateMesh = crate->addChild<MeshInstance3D>(BoxMesh::create(Vector3(1.8f, 1.2f, 1.8f)));
   crateMesh->setMaterial(crateMat);
+  crateMesh->setCastShadowsSetting(ShadowCastingSetting3D::On);
 
   // 8. Orbiting Decorative UV Sphere
   auto aquaMat = StandardMaterial3D::create(Color::from_rgba8(80, 200, 255));
@@ -406,6 +412,7 @@ void Showcase3DScene::onReady() {
   m_sphere = addChild<MeshInstance3D>(SphereMesh::create(0.5f));
   m_sphere->setPosition(Vector3(-3.0f, 1.5f, -2.0f));
   m_sphere->setMaterial(aquaMat);
+  m_sphere->setCastShadowsSetting(ShadowCastingSetting3D::On);
 
   // 8.5. 3D Glowing Golden Collectible Coins
   auto goldCoinMat = StandardMaterial3D::create(Color::from_rgba8(255, 215, 0));
@@ -430,6 +437,7 @@ void Showcase3DScene::onReady() {
     auto coinMesh = addChild<MeshInstance3D>(CylinderMesh::create(0.35f, 0.08f));
     coinMesh->setPosition(coinPositions[i]);
     coinMesh->setMaterial(goldCoinMat);
+    coinMesh->setCastShadowsSetting(ShadowCastingSetting3D::Off);
     m_coins.push_back({coinMesh, coinPositions[i], false, static_cast<float>(i) * 1.05f});
   }
 
@@ -444,7 +452,7 @@ void Showcase3DScene::onReady() {
   // Left Panel: Controls & Navigation
   auto panel = overlay->addChild<Panel>();
   panel->setPosition({24.0f, 24.0f});
-  panel->setSize({380.0f, 260.0f});
+  panel->setSize({380.0f, 275.0f});
   panel->backgroundColor = Color::from_rgba8(18, 22, 34, 235);
   panel->borderColor = Color::from_rgba8(70, 90, 140);
   panel->borderWidth = 1.5f;
@@ -452,13 +460,14 @@ void Showcase3DScene::onReady() {
 
   auto vbox = panel->addChild<VBoxContainer>(5.0f);
   vbox->setPosition({14.0f, 12.0f});
-  vbox->setSize({352.0f, 236.0f});
+  vbox->setSize({352.0f, 251.0f});
 
   vbox->addChild<Label>("3D THIRD-PERSON CONTROLLER", 15.0f, Color::GOLD);
   vbox->addChild<Label>("• Walk: W/A/S/D or Arrow Keys", 11.5f, Color::from_rgba8(100, 230, 160));
   vbox->addChild<Label>("• Jump: SPACE (Bullet 3 Kinematic Step)", 11.5f, Color::from_rgba8(120, 220, 255));
   vbox->addChild<Label>("• Look Around: Mouse (Locked by Default)", 11.5f, Color::from_rgba8(255, 215, 80));
   vbox->addChild<Label>("• Unlock / Lock Mouse: ESC Key or Click", 11.5f, Color::from_rgba8(255, 140, 100));
+  vbox->addChild<Label>("• Toggle Shadows: 'T' Key (Light3D Toggle)", 11.5f, Color::from_rgba8(255, 180, 100));
   vbox->addChild<Label>("• Collect: 3D Glowing Gold Coins", 11.5f, Color::from_rgba8(255, 230, 80));
   vbox->addChild<Label>("• Zoom Boom: Mouse Scroll Wheel", 11.5f, Color::from_rgba8(255, 215, 80));
   vbox->addChild<Label>("• Nodes: CharacterBody3D + SpringArm3D", 11.5f, Color::from_rgba8(170, 190, 230));
@@ -477,7 +486,7 @@ void Showcase3DScene::onReady() {
   // Right Panel: Live Engine, Time & Physics Diagnostics
   auto diagPanel = overlay->addChild<Panel>();
   diagPanel->setPosition({std::max(24.0f, vp.x - 450.0f), 24.0f});
-  diagPanel->setSize({426.0f, 265.0f});
+  diagPanel->setSize({426.0f, 285.0f});
   diagPanel->backgroundColor = Color::from_rgba8(18, 22, 34, 235);
   diagPanel->borderColor = Color::from_rgba8(70, 90, 140);
   diagPanel->borderWidth = 1.5f;
@@ -485,13 +494,14 @@ void Showcase3DScene::onReady() {
 
   auto diagVbox = diagPanel->addChild<VBoxContainer>(5.0f);
   diagVbox->setPosition({14.0f, 12.0f});
-  diagVbox->setSize({398.0f, 241.0f});
+  diagVbox->setSize({398.0f, 261.0f});
 
   diagVbox->addChild<Label>("REAL-TIME ENGINE DIAGNOSTICS", 15.0f, Color::CYAN);
   m_fpsLabel = diagVbox->addChild<Label>("Performance: Calculating...", 12.0f, Color::from_rgba8(80, 240, 140));
   m_physicsStatusLabel = diagVbox->addChild<Label>("Bullet 3 Physics: [INITIALIZING]", 11.5f, Color::from_rgba8(120, 220, 255));
   m_playerPosLabel = diagVbox->addChild<Label>("Player: Pos (0.0, 0.0, 0.0) | Vel (0.0, 0.0, 0.0)", 11.5f, Color::from_rgba8(220, 230, 245));
   m_cameraInfoLabel = diagVbox->addChild<Label>("Camera Boom: 6.0m | Pitch: -17° | Yaw: 0°", 11.5f, Color::from_rgba8(255, 215, 80));
+  m_shadowStatusLabel = diagVbox->addChild<Label>("Real-Time Shadows: [ENABLED] (Press 'T')", 11.5f, Color::from_rgba8(80, 240, 140));
   m_mouseModeLabel = diagVbox->addChild<Label>("Mouse Mode: [LOCKED / CAPTURED]", 11.5f, Color::from_rgba8(80, 240, 140));
   m_coinCountLabel = diagVbox->addChild<Label>("Golden Coins: 0 / 6 Collected", 12.0f, Color::from_rgba8(255, 220, 50));
   
@@ -506,6 +516,23 @@ void Showcase3DScene::onProcess(float delta) {
       Input::setMouseMode(MouseMode::Visible);
     } else {
       Input::setMouseMode(MouseMode::Captured);
+    }
+  }
+
+  // 0.5. Real-Time Shadow Toggle via 'T' Key
+  if (Input::isKeyJustPressed(Key::T)) {
+    if (m_sunLight) {
+      m_sunLight->setShadow(!m_sunLight->hasShadow());
+    }
+  }
+
+  if (m_shadowStatusLabel && m_sunLight) {
+    if (m_sunLight->hasShadow()) {
+      m_shadowStatusLabel->setText("Real-Time Shadows: [ENABLED] (Press 'T')");
+      m_shadowStatusLabel->fontColor = Color::from_rgba8(80, 240, 140);
+    } else {
+      m_shadowStatusLabel->setText("Real-Time Shadows: [DISABLED] (Press 'T')");
+      m_shadowStatusLabel->fontColor = Color::from_rgba8(255, 120, 100);
     }
   }
 
