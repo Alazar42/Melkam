@@ -33,6 +33,14 @@ target_link_libraries(MelkamEngine PRIVATE
     Bullet::Bullet
 )
 
+if(MSVC)
+    target_compile_options(MelkamEngine PRIVATE /fp:fast /W3)
+    target_compile_options(MelkamEngine PRIVATE $<$<CONFIG:Debug>:/Ob2>)
+    target_compile_options(MelkamEngine PRIVATE $<$<NOT:$<CONFIG:Debug>>:/O2 /Ob2 /Oi /Ot>)
+else()
+    target_compile_options(MelkamEngine PRIVATE -ffast-math -O3)
+endif()
+
 # Automatically bundle / copy project assets with the executable output
 add_custom_command(TARGET MelkamEngine POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory

@@ -29,6 +29,12 @@ public:
   float tonemapExposure = 1.0f;
   float tonemapWhite = 1.0f;
 
+  // Godot 4 Standard Glow / Bloom Post-Processing
+  bool glowEnabled = true;
+  float glowIntensity = 0.85f;
+  float glowThreshold = 0.70f;
+  float glowBloom = 0.6f;
+
   bool fogEnabled = false;
   Color fogColor = Color::from_rgba8(120, 140, 180);
   float fogDensity = 0.01f;

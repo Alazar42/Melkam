@@ -149,6 +149,7 @@ public:
     }
 
     s_currentWindow = this;
+    Input::registerWindow(m_window);
     m_isOpen = true;
     return true;
   }

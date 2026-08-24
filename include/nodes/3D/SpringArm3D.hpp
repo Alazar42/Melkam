@@ -37,12 +37,17 @@ public:
         if (event.mouseButton == MouseButton::Left || event.mouseButton == MouseButton::Right) {
           m_isDragging = true;
           m_lastMousePos = event.mousePosition;
+          if (!Input::isMouseCaptured()) {
+            Input::setMouseMode(MouseMode::Captured);
+          }
         }
       } else {
-        m_isDragging = false;
+        if (!Input::isMouseCaptured()) {
+          m_isDragging = false;
+        }
       }
     } else if (event.type == InputEventType::MouseMotion) {
-      if (m_isDragging) {
+      if (m_isDragging || Input::isMouseCaptured()) {
         Vector2 delta = event.mouseDelta;
         yaw -= delta.x * mouseSensitivity;
         pitch = std::clamp(pitch - delta.y * mouseSensitivity, minPitch, maxPitch);

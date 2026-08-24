@@ -216,6 +216,15 @@ struct InputEvent {
   }
 };
 
+// Godot-Standard Mouse Cursor Modes
+enum class MouseMode : uint8_t {
+  Visible = 0,
+  Hidden = 1,
+  Captured = 2,
+  Confined = 3,
+  Locked = 2 // Godot 4 alias for Captured
+};
+
 // Comprehensive Input manager handling real-time Keyboard and Mouse states on top of SDL3.
 class Input {
 public:
@@ -362,23 +371,74 @@ public:
     return vec;
   }
 
+  // Registers active SDL_Window handle for cursor capturing
+  static void registerWindow(SDL_Window *win) {
+    s_nativeWindow = win;
+  }
+
+  // Sets Godot-standard mouse mode (Visible, Hidden, Captured/Locked, Confined)
+  static void setMouseMode(MouseMode mode, SDL_Window *window = nullptr) {
+    s_mouseMode = mode;
+    SDL_Window *win = window ? window : s_nativeWindow;
+
+    switch (mode) {
+    case MouseMode::Visible:
+      SDL_ShowCursor();
+      if (win) {
+        SDL_SetWindowRelativeMouseMode(win, false);
+        SDL_SetWindowMouseGrab(win, false);
+      }
+      break;
+
+    case MouseMode::Hidden:
+      SDL_HideCursor();
+      if (win) {
+        SDL_SetWindowRelativeMouseMode(win, false);
+        SDL_SetWindowMouseGrab(win, false);
+      }
+      break;
+
+    case MouseMode::Captured:
+      SDL_HideCursor();
+      if (win) {
+        SDL_SetWindowRelativeMouseMode(win, true);
+      }
+      break;
+
+    case MouseMode::Confined:
+      SDL_ShowCursor();
+      if (win) {
+        SDL_SetWindowRelativeMouseMode(win, false);
+        SDL_SetWindowMouseGrab(win, true);
+      }
+      break;
+    }
+  }
+
+  // Returns current mouse mode
+  static MouseMode getMouseMode() { return s_mouseMode; }
+
+  // Returns true if mouse cursor is currently captured/locked
+  static bool isMouseCaptured() { return s_mouseMode == MouseMode::Captured; }
+  static bool isMouseLocked() { return isMouseCaptured(); }
+
   // Shows or hides the OS mouse cursor.
   static void showCursor(bool show) {
     if (show) {
-      SDL_ShowCursor();
+      setMouseMode(MouseMode::Visible);
     } else {
-      SDL_HideCursor();
+      setMouseMode(MouseMode::Hidden);
     }
   }
 
   // Enables or disables relative mouse mode (locks cursor inside window for FPS/camera controls).
   static void setRelativeMouseMode(SDL_Window *window, bool enabled) {
-    if (window) {
-      SDL_SetWindowRelativeMouseMode(window, enabled);
-    }
+    setMouseMode(enabled ? MouseMode::Captured : MouseMode::Visible, window);
   }
 
 private:
+  inline static MouseMode s_mouseMode = MouseMode::Visible;
+  inline static SDL_Window *s_nativeWindow = nullptr;
   inline static std::array<bool, SDL_SCANCODE_COUNT> s_currentKeys{};
   inline static std::array<bool, SDL_SCANCODE_COUNT> s_previousKeys{};
 

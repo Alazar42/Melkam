@@ -30,11 +30,13 @@ public:
   Showcase3DScene() : Node("Showcase3DScene") {}
   ~Showcase3DScene() override {
     PhysicsServer3D::get().clear();
+    Input::setMouseMode(MouseMode::Visible);
   }
   void onReady() override;
   void onProcess(float delta) override;
   void onDestroy() override {
     PhysicsServer3D::get().clear();
+    Input::setMouseMode(MouseMode::Visible);
   }
 
 private:
@@ -55,6 +57,19 @@ private:
   Ref<Label> m_playerPosLabel = nullptr;
   Ref<Label> m_physicsStatusLabel = nullptr;
   Ref<Label> m_cameraInfoLabel = nullptr;
+  Ref<Label> m_mouseModeLabel = nullptr;
+  Ref<Label> m_coinCountLabel = nullptr;
+
+  // 3D Glowing Coins
+  struct Coin3D {
+    Ref<MeshInstance3D> meshNode;
+    Vector3 basePos;
+    bool collected = false;
+    float bobOffset = 0.0f;
+  };
+  std::vector<Coin3D> m_coins;
+  int m_collectedCoinCount = 0;
+  float m_coinAngle = 0.0f;
 };
 
 // =============================================================================
@@ -305,12 +320,16 @@ void MainMenuScene::onReady() {
 void Showcase3DScene::onReady() {
   std::cout << "=== [3D Third-Person Showcase] Scene Ready ===" << std::endl;
 
-  // 1. World Environment (Sky & ACES Tonemapping)
+  // 1. World Environment (Sky & ACES Tonemapping & Bloom Glow)
   m_environment = addChild<WorldEnvironment>();
   m_environment->environment->backgroundMode = EnvironmentBGMode::Sky;
   m_environment->environment->ambientLightColor = Color::from_rgba8(70, 85, 120);
   m_environment->environment->ambientLightEnergy = 1.0f;
   m_environment->environment->tonemapMode = TonemapMode3D::ACES;
+  m_environment->environment->glowEnabled = true;
+  m_environment->environment->glowIntensity = 1.0f;
+  m_environment->environment->glowThreshold = 0.65f;
+  m_environment->environment->glowBloom = 0.85f;
 
   // 2. Directional Sun Light & Omni Point Light
   m_sunLight = addChild<DirectionalLight3D>();
@@ -321,6 +340,13 @@ void Showcase3DScene::onReady() {
   m_omniLight->setPosition(Vector3(0.0f, 4.0f, 0.0f));
   m_omniLight->lightColor = Color::CYAN;
   m_omniLight->omniRange = 25.0f;
+
+  // Golden ambient glow light for coins
+  auto coinGlowLight = addChild<OmniLight3D>();
+  coinGlowLight->setPosition(Vector3(0.0f, 1.8f, 0.0f));
+  coinGlowLight->lightColor = Color::from_rgba8(255, 215, 70);
+  coinGlowLight->lightEnergy = 1.4f;
+  coinGlowLight->omniRange = 14.0f;
 
   // 3. Static Physics Ground Floor (StaticBody3D + CollisionShape3D + PlaneMesh)
   m_floorBody = addChild<StaticBody3D>();
@@ -362,15 +388,15 @@ void Showcase3DScene::onReady() {
   m_camera->makeCurrent();
 
   // 7. Step-Up Obstacle Crate (StaticBody3D + CollisionShape3D)
-  auto goldMat = StandardMaterial3D::create(Color::GOLD);
-  goldMat->metallic = 0.8f;
-  goldMat->roughness = 0.2f;
+  auto crateMat = StandardMaterial3D::create(Color::from_rgba8(175, 130, 75));
+  crateMat->metallic = 0.0f;
+  crateMat->roughness = 0.85f;
 
   auto crate = addChild<StaticBody3D>();
   crate->setPosition(Vector3(3.0f, 0.6f, -2.0f));
   crate->addChild<CollisionShape3D>(std::make_shared<BoxShape3D>(Vector3(1.8f, 1.2f, 1.8f)));
   auto crateMesh = crate->addChild<MeshInstance3D>(BoxMesh::create(Vector3(1.8f, 1.2f, 1.8f)));
-  crateMesh->setMaterial(goldMat);
+  crateMesh->setMaterial(crateMat);
 
   // 8. Orbiting Decorative UV Sphere
   auto aquaMat = StandardMaterial3D::create(Color::from_rgba8(80, 200, 255));
@@ -381,15 +407,44 @@ void Showcase3DScene::onReady() {
   m_sphere->setPosition(Vector3(-3.0f, 1.5f, -2.0f));
   m_sphere->setMaterial(aquaMat);
 
+  // 8.5. 3D Glowing Golden Collectible Coins
+  auto goldCoinMat = StandardMaterial3D::create(Color::from_rgba8(255, 215, 0));
+  goldCoinMat->roughness = 0.15f;
+  goldCoinMat->metallic = 0.95f;
+  goldCoinMat->emissionColor = Color::from_rgba8(255, 200, 30);
+  goldCoinMat->emissionEnergy = 1.4f;
+  goldCoinMat->cullMode = CullMode3D::Back;
+
+  std::vector<Vector3> coinPositions = {
+      Vector3(0.0f, 1.0f, -4.5f),
+      Vector3(-4.5f, 1.0f, 0.0f),
+      Vector3(4.5f, 1.0f, 0.0f),
+      Vector3(0.0f, 1.0f, 4.5f),
+      Vector3(3.0f, 1.8f, -2.0f), // on top of step crate
+      Vector3(-3.0f, 1.0f, 3.0f),
+  };
+
+  m_coins.clear();
+  m_collectedCoinCount = 0;
+  for (size_t i = 0; i < coinPositions.size(); ++i) {
+    auto coinMesh = addChild<MeshInstance3D>(CylinderMesh::create(0.35f, 0.08f));
+    coinMesh->setPosition(coinPositions[i]);
+    coinMesh->setMaterial(goldCoinMat);
+    m_coins.push_back({coinMesh, coinPositions[i], false, static_cast<float>(i) * 1.05f});
+  }
+
   // 9. UI HUD Overlay
   Vector2 vp = Window::getViewportSize();
   auto overlay = addChild<Control>("UIOverlay");
   overlay->setSize(vp);
 
+  // 10. Default Mouse Capture (Godot-Style Locked Mode)
+  Input::setMouseMode(MouseMode::Captured);
+
   // Left Panel: Controls & Navigation
   auto panel = overlay->addChild<Panel>();
   panel->setPosition({24.0f, 24.0f});
-  panel->setSize({380.0f, 240.0f});
+  panel->setSize({380.0f, 260.0f});
   panel->backgroundColor = Color::from_rgba8(18, 22, 34, 235);
   panel->borderColor = Color::from_rgba8(70, 90, 140);
   panel->borderWidth = 1.5f;
@@ -397,12 +452,14 @@ void Showcase3DScene::onReady() {
 
   auto vbox = panel->addChild<VBoxContainer>(5.0f);
   vbox->setPosition({14.0f, 12.0f});
-  vbox->setSize({352.0f, 216.0f});
+  vbox->setSize({352.0f, 236.0f});
 
   vbox->addChild<Label>("3D THIRD-PERSON CONTROLLER", 15.0f, Color::GOLD);
   vbox->addChild<Label>("• Walk: W/A/S/D or Arrow Keys", 11.5f, Color::from_rgba8(100, 230, 160));
   vbox->addChild<Label>("• Jump: SPACE (Bullet 3 Kinematic Step)", 11.5f, Color::from_rgba8(120, 220, 255));
-  vbox->addChild<Label>("• Orbit Camera: Drag Mouse (SpringArm3D)", 11.5f, Color::from_rgba8(255, 215, 80));
+  vbox->addChild<Label>("• Look Around: Mouse (Locked by Default)", 11.5f, Color::from_rgba8(255, 215, 80));
+  vbox->addChild<Label>("• Unlock / Lock Mouse: ESC Key or Click", 11.5f, Color::from_rgba8(255, 140, 100));
+  vbox->addChild<Label>("• Collect: 3D Glowing Gold Coins", 11.5f, Color::from_rgba8(255, 230, 80));
   vbox->addChild<Label>("• Zoom Boom: Mouse Scroll Wheel", 11.5f, Color::from_rgba8(255, 215, 80));
   vbox->addChild<Label>("• Nodes: CharacterBody3D + SpringArm3D", 11.5f, Color::from_rgba8(170, 190, 230));
 
@@ -413,13 +470,14 @@ void Showcase3DScene::onReady() {
   backBtn->fontSize = 12.0f;
   backBtn->pressed.connect([this]() {
     std::cout << "=== Returning to Main Menu ===" << std::endl;
+    Input::setMouseMode(MouseMode::Visible);
     getTree()->changeScene(makeRef<MainMenuScene>());
   });
 
   // Right Panel: Live Engine, Time & Physics Diagnostics
   auto diagPanel = overlay->addChild<Panel>();
   diagPanel->setPosition({std::max(24.0f, vp.x - 450.0f), 24.0f});
-  diagPanel->setSize({426.0f, 240.0f});
+  diagPanel->setSize({426.0f, 265.0f});
   diagPanel->backgroundColor = Color::from_rgba8(18, 22, 34, 235);
   diagPanel->borderColor = Color::from_rgba8(70, 90, 140);
   diagPanel->borderWidth = 1.5f;
@@ -427,20 +485,30 @@ void Showcase3DScene::onReady() {
 
   auto diagVbox = diagPanel->addChild<VBoxContainer>(5.0f);
   diagVbox->setPosition({14.0f, 12.0f});
-  diagVbox->setSize({398.0f, 216.0f});
+  diagVbox->setSize({398.0f, 241.0f});
 
   diagVbox->addChild<Label>("REAL-TIME ENGINE DIAGNOSTICS", 15.0f, Color::CYAN);
   m_fpsLabel = diagVbox->addChild<Label>("Performance: Calculating...", 12.0f, Color::from_rgba8(80, 240, 140));
   m_physicsStatusLabel = diagVbox->addChild<Label>("Bullet 3 Physics: [INITIALIZING]", 11.5f, Color::from_rgba8(120, 220, 255));
   m_playerPosLabel = diagVbox->addChild<Label>("Player: Pos (0.0, 0.0, 0.0) | Vel (0.0, 0.0, 0.0)", 11.5f, Color::from_rgba8(220, 230, 245));
   m_cameraInfoLabel = diagVbox->addChild<Label>("Camera Boom: 6.0m | Pitch: -17° | Yaw: 0°", 11.5f, Color::from_rgba8(255, 215, 80));
+  m_mouseModeLabel = diagVbox->addChild<Label>("Mouse Mode: [LOCKED / CAPTURED]", 11.5f, Color::from_rgba8(80, 240, 140));
+  m_coinCountLabel = diagVbox->addChild<Label>("Golden Coins: 0 / 6 Collected", 12.0f, Color::from_rgba8(255, 220, 50));
   
   diagVbox->addChild<HSeparator>();
-  diagVbox->addChild<Label>("Renderer: 3D Vulkan PBR Software Rasterizer", 11.0f, Color::from_rgba8(150, 170, 200));
-  diagVbox->addChild<Label>("Environment: WorldEnvironment (Sky & ACES)", 11.0f, Color::from_rgba8(150, 170, 200));
+  diagVbox->addChild<Label>("Renderer: 3D Vulkan PBR Software Rasterizer (60+ FPS)", 11.0f, Color::from_rgba8(150, 170, 200));
 }
 
 void Showcase3DScene::onProcess(float delta) {
+  // 0. Mouse Capture Toggle via ESC
+  if (Input::isKeyJustPressed(Key::Escape)) {
+    if (Input::isMouseCaptured()) {
+      Input::setMouseMode(MouseMode::Visible);
+    } else {
+      Input::setMouseMode(MouseMode::Captured);
+    }
+  }
+
   // 1. Third-Person Player Kinematic Movement with SpringArm3D Heading
   if (m_player) {
     Vector3 inputDir(0.0f, 0.0f, 0.0f);
@@ -527,6 +595,49 @@ void Showcase3DScene::onProcess(float delta) {
     std::snprintf(buf, sizeof(buf), "Camera Boom: %.2f m / %.1f m | Pitch: %.1f° | Yaw: %.1f°",
                   m_springArm->getHitLength(), m_springArm->springLength, pitchDeg, yawDeg);
     m_cameraInfoLabel->setText(buf);
+  }
+
+  if (m_mouseModeLabel) {
+    if (Input::isMouseCaptured()) {
+      m_mouseModeLabel->setText("Mouse Mode: [LOCKED / CAPTURED] (ESC to Unlock)");
+      m_mouseModeLabel->fontColor = Color::from_rgba8(80, 240, 140);
+    } else {
+      m_mouseModeLabel->setText("Mouse Mode: [VISIBLE / UNLOCKED] (Click to Lock)");
+      m_mouseModeLabel->fontColor = Color::from_rgba8(255, 215, 80);
+    }
+  }
+
+  // 3. Update 3D Glowing Golden Coins & Collection
+  m_coinAngle += delta * 3.5f;
+  for (size_t i = 0; i < m_coins.size(); ++i) {
+    auto &coin = m_coins[i];
+    if (coin.collected || !coin.meshNode) continue;
+
+    float yBob = std::sin(m_coinAngle + coin.bobOffset) * 0.15f;
+    coin.meshNode->setPosition(Vector3(coin.basePos.x, coin.basePos.y + yBob, coin.basePos.z));
+    coin.meshNode->setRotation(Vector3(0.2f, m_coinAngle + coin.bobOffset, 0.0f));
+
+    if (m_player) {
+      Vector3 ppos = m_player->getPosition();
+      Vector3 diff = ppos - coin.basePos;
+      if (std::sqrt(diff.x * diff.x + diff.z * diff.z) < 1.3f && std::abs(diff.y) < 1.5f) {
+        coin.collected = true;
+        coin.meshNode->setVisible(false);
+        m_collectedCoinCount++;
+        std::cout << "=== [3D SHOWCASE] Golden Coin Collected! (" << m_collectedCoinCount << " / " << m_coins.size() << ") ===" << std::endl;
+      }
+    }
+  }
+
+  if (m_coinCountLabel) {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "Golden Coins: %d / %zu %s",
+                  m_collectedCoinCount, m_coins.size(),
+                  (m_collectedCoinCount == static_cast<int>(m_coins.size())) ? "★ ALL COLLECTED!" : "Collected");
+    m_coinCountLabel->setText(buf);
+    if (m_collectedCoinCount == static_cast<int>(m_coins.size())) {
+      m_coinCountLabel->fontColor = Color::from_rgba8(100, 255, 140);
+    }
   }
 
   // 3. Decorative rotating sphere

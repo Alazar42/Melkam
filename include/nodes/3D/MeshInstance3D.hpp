@@ -134,35 +134,45 @@ public:
     float maxR = std::max(topRadius, bottomRadius);
     mesh.aabb = AABB(Vector3(-maxR, -hh, -maxR), Vector3(maxR * 2.0f, height, maxR * 2.0f));
 
-    // Top and bottom rings
+    // Top and bottom center vertices
+    uint32_t topCenter = static_cast<uint32_t>(mesh.vertices.size());
+    mesh.vertices.push_back({Vector3(0.0f, hh, 0.0f), Vector3(0.0f, 1.0f, 0.0f), Vector2(0.5f, 0.5f)});
+    uint32_t botCenter = static_cast<uint32_t>(mesh.vertices.size());
+    mesh.vertices.push_back({Vector3(0.0f, -hh, 0.0f), Vector3(0.0f, -1.0f, 0.0f), Vector2(0.5f, 0.5f)});
+
+    uint32_t ringStart = static_cast<uint32_t>(mesh.vertices.size());
     for (uint32_t i = 0; i < radialSegments; ++i) {
       float theta = static_cast<float>(i) * 6.2831853f / static_cast<float>(radialSegments);
-      float nextTheta = static_cast<float>((i + 1) % radialSegments) * 6.2831853f / static_cast<float>(radialSegments);
-
       float ct = std::cos(theta), st = std::sin(theta);
-      float cnt = std::cos(nextTheta), snt = std::sin(nextTheta);
+      Vector3 norm(ct, 0.0f, st);
+      mesh.vertices.push_back({Vector3(ct * topRadius, hh, st * topRadius), norm, Vector2(static_cast<float>(i) / radialSegments, 1.0f)});
+      mesh.vertices.push_back({Vector3(ct * bottomRadius, -hh, st * bottomRadius), norm, Vector2(static_cast<float>(i) / radialSegments, 0.0f)});
+    }
 
-      // Side Quad
-      Vector3 t0(ct * topRadius, hh, st * topRadius);
-      Vector3 b0(ct * bottomRadius, -hh, st * bottomRadius);
-      Vector3 t1(cnt * topRadius, hh, snt * topRadius);
-      Vector3 b1(cnt * bottomRadius, -hh, snt * bottomRadius);
+    for (uint32_t i = 0; i < radialSegments; ++i) {
+      uint32_t next = (i + 1) % radialSegments;
+      uint32_t t0 = ringStart + i * 2;
+      uint32_t b0 = ringStart + i * 2 + 1;
+      uint32_t t1 = ringStart + next * 2;
+      uint32_t b1 = ringStart + next * 2 + 1;
 
-      Vector3 n0 = Vector3(ct, 0.0f, st).normalized();
-      Vector3 n1 = Vector3(cnt, 0.0f, snt).normalized();
+      // Top cap triangle
+      mesh.indices.push_back(topCenter);
+      mesh.indices.push_back(t0);
+      mesh.indices.push_back(t1);
 
-      uint32_t base = static_cast<uint32_t>(mesh.vertices.size());
-      mesh.vertices.push_back({b0, n0, Vector2(0.0f, 0.0f)});
-      mesh.vertices.push_back({t0, n0, Vector2(0.0f, 1.0f)});
-      mesh.vertices.push_back({t1, n1, Vector2(1.0f, 1.0f)});
-      mesh.vertices.push_back({b1, n1, Vector2(1.0f, 0.0f)});
+      // Bottom cap triangle
+      mesh.indices.push_back(botCenter);
+      mesh.indices.push_back(b1);
+      mesh.indices.push_back(b0);
 
-      mesh.indices.push_back(base + 0);
-      mesh.indices.push_back(base + 1);
-      mesh.indices.push_back(base + 2);
-      mesh.indices.push_back(base + 0);
-      mesh.indices.push_back(base + 2);
-      mesh.indices.push_back(base + 3);
+      // Side quad
+      mesh.indices.push_back(b0);
+      mesh.indices.push_back(t0);
+      mesh.indices.push_back(t1);
+      mesh.indices.push_back(b0);
+      mesh.indices.push_back(t1);
+      mesh.indices.push_back(b1);
     }
 
     return mesh;
@@ -176,6 +186,8 @@ public:
   Color albedoColor = Color::WHITE;
   float roughness = 0.5f;
   float metallic = 0.0f;
+  Color emissionColor = Color::BLACK;
+  float emissionEnergy = 0.0f;
   bool cullBackfaces = true;
   Ref<StandardMaterial3D> material = nullptr;
 
@@ -215,6 +227,8 @@ public:
       comp.albedoColor = albedoColor;
       comp.roughness = roughness;
       comp.metallic = metallic;
+      comp.emissionColor = emissionColor;
+      comp.emissionEnergy = emissionEnergy;
       comp.cullBackfaces = cullBackfaces;
       comp.material = material;
     }
@@ -233,6 +247,8 @@ public:
       albedoColor = material->albedoColor;
       roughness = material->roughness;
       metallic = material->metallic;
+      emissionColor = material->emissionColor;
+      emissionEnergy = material->emissionEnergy;
       cullBackfaces = (material->cullMode != CullMode3D::Disabled);
     }
     if (m_entity.isValid() && m_entity.hasComponent<Mesh3DComponent>()) {
@@ -241,11 +257,20 @@ public:
       comp.albedoColor = albedoColor;
       comp.roughness = roughness;
       comp.metallic = metallic;
+      comp.emissionColor = emissionColor;
+      comp.emissionEnergy = emissionEnergy;
       comp.cullBackfaces = cullBackfaces;
     }
   }
 
   Ref<StandardMaterial3D> getMaterial() const { return material; }
+
+  void setVisible(bool v) {
+    visible = v;
+    if (m_entity.isValid() && m_entity.hasComponent<Mesh3DComponent>()) {
+      m_entity.getComponent<Mesh3DComponent>().visible = v;
+    }
+  }
 
   void setRoughness(float r) {
     roughness = r;

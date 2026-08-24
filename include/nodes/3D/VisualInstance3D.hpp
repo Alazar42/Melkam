@@ -13,8 +13,10 @@ public:
 
   VisualInstance3D() : Node3D("VisualInstance3D") {}
   explicit VisualInstance3D(std::string name) : Node3D(std::move(name)) {}
-
   virtual AABB getAABB() const { return AABB(); }
+
+  void setVisible(bool v) { visible = v; }
+  bool isVisible() const { return visible; }
 
   void setLayerMask(uint32_t mask) { layers = mask; }
   uint32_t getLayerMask() const { return layers; }

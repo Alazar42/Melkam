@@ -12,14 +12,13 @@
 #include <iostream>
 #include <vector>
 
-// Master 3D Rendering Subsystem with Pixel-Accurate Z-Buffering & Incremental DDA Rasterization
+// Master 3D Rendering Subsystem with Pixel-Accurate Z-Buffering & High-Performance Span Rasterization
 class Renderer3D {
 public:
   inline static const Camera3D *s_activeCamera = nullptr;
   inline static bool s_isRendering = false;
 
   // Framebuffer & Depth Buffer
-  inline static float s_renderScale = 0.55f; // Internal 3D render resolution scale for ultra-smooth 60+ FPS
   inline static SDL_Texture *s_framebufferTexture = nullptr;
   inline static int s_fbWidth = 0;
   inline static int s_fbHeight = 0;
@@ -58,17 +57,15 @@ public:
     s_isRendering = false;
   }
 
-  // Processes ECS 3D view and renders all active 3D meshes with Pixel-Accurate Z-Buffering
+  // Renders all ECS 3D meshes with Pixel-Accurate Z-Buffering (No disappearing geometry)
   static void render(float viewportWidth, float viewportHeight) {
     SDL_Renderer *sdlRenderer = Renderer2D::getRenderer();
     if (!sdlRenderer || viewportWidth <= 0.0f || viewportHeight <= 0.0f) return;
 
-    // Viewport scaling for blistering 60+ FPS performance
-    float scale = std::clamp(s_renderScale, 0.25f, 1.0f);
-    int w = std::max(1, static_cast<int>(viewportWidth * scale));
-    int h = std::max(1, static_cast<int>(viewportHeight * scale));
+    int w = static_cast<int>(viewportWidth);
+    int h = static_cast<int>(viewportHeight);
 
-    // 1. Manage Framebuffer Texture & Buffers
+    // 1. Manage Framebuffer Texture & Z-Buffers
     if (w != s_fbWidth || h != s_fbHeight || !s_framebufferTexture) {
       if (s_framebufferTexture) {
         SDL_DestroyTexture(s_framebufferTexture);
@@ -86,12 +83,12 @@ public:
 
     if (!s_framebufferTexture || s_colorBuffer.empty()) return;
 
-    // 0. WorldEnvironment Background & Ambient Illumination
-    const Environment *env = WorldEnvironment::getCurrent();
-    Color ambientColor = Color::from_rgba8(50, 55, 75);
+    // 2. Clear Z-Buffer (0.0f represents infinitely far since we use 1/Z)
+    std::fill(s_depthBuffer.begin(), s_depthBuffer.end(), 0.0f);
 
-    // Fast SIMD/memset depth clear
-    std::memset(s_depthBuffer.data(), 0, s_depthBuffer.size() * sizeof(float));
+    // 3. Clear Color Buffer / Sky
+    const Environment *env = WorldEnvironment::getCurrent();
+    Color ambientColor = Color::from_rgba8(55, 65, 85);
 
     if (env) {
       ambientColor = env->ambientLightColor * env->ambientLightEnergy;
@@ -118,7 +115,7 @@ public:
     }
 
     Systems3D::updateTransforms();
-    Systems3D::updateCameras(static_cast<float>(w), static_cast<float>(h));
+    Systems3D::updateCameras(viewportWidth, viewportHeight);
 
     auto meshView = Entity::getRegistry().view<Mesh3DComponent, Transform3DComponent>();
     auto cameraView = Entity::getRegistry().view<Camera3DComponent, Transform3DComponent>();
@@ -150,7 +147,7 @@ public:
     float fovDeg = activeCamComp ? activeCamComp->fov : 75.0f;
     float fovRad = fovDeg * 3.14159265f / 180.0f;
     float f = 1.0f / std::tan(fovRad * 0.5f);
-    float aspect = static_cast<float>(w) / static_cast<float>(h);
+    float aspect = viewportWidth / viewportHeight;
     float nearPlane = activeCamComp ? activeCamComp->nearPlane : 0.05f;
 
     // Collect Lights
@@ -167,7 +164,7 @@ public:
       dirLights.push_back({forward, l.color, l.energy});
     }
     if (dirLights.empty()) {
-      dirLights.push_back({Vector3(-0.5f, -0.8f, -0.4f).normalized(), Color::from_rgba8(255, 245, 230), 1.0f});
+      dirLights.push_back({Vector3(-0.5f, -0.8f, -0.4f).normalized(), Color::from_rgba8(255, 245, 230), 1.3f});
     }
 
     struct PointLightData {
@@ -183,10 +180,17 @@ public:
       pointLights.push_back({t.globalTransform.origin, l.color, l.energy, l.range});
     }
 
-    float halfW = static_cast<float>(w) * 0.5f;
-    float halfH = static_cast<float>(h) * 0.5f;
+    struct GlowingHalo {
+      Vector2 screenPos;
+      float radius;
+      Color color;
+    };
+    std::vector<GlowingHalo> glowHalos;
 
-    // Rasterize each 3D Mesh in the ECS registry
+    float halfW = viewportWidth * 0.5f;
+    float halfH = viewportHeight * 0.5f;
+
+    // Rasterize all 3D meshes with Pixel-Accurate Z-Buffering
     for (auto entity : meshView) {
       const auto &meshComp = meshView.get<Mesh3DComponent>(entity);
       const auto &transComp = meshView.get<Transform3DComponent>(entity);
@@ -196,24 +200,38 @@ public:
       Transform3D globalTrans = transComp.globalTransform;
       Basis normalBasis = globalTrans.basis.inverse().transposed();
 
+      // Emissive radiant light halo detection for coins
+      if (meshComp.emissionEnergy > 0.1f) {
+        Vector3 centerWorld = globalTrans.origin;
+        Vector3 camCenter = viewInv.xform(centerWorld);
+        if (-camCenter.z > nearPlane) {
+          float invZ = 1.0f / (-camCenter.z);
+          float sx = (camCenter.x * f / aspect) * invZ * halfW + halfW;
+          float sy = (1.0f - (camCenter.y * f) * invZ) * halfH;
+          float haloRad = std::clamp(85.0f * invZ, 12.0f, 150.0f);
+          Color haloCol = (meshComp.emissionColor * meshComp.emissionEnergy);
+          glowHalos.push_back({{sx, sy}, haloRad, haloCol});
+        }
+      }
+
       size_t indexCount = meshComp.indices.size();
       for (size_t i = 0; i + 2 < indexCount; i += 3) {
         const Vertex3D &v0 = meshComp.vertices[meshComp.indices[i]];
         const Vertex3D &v1 = meshComp.vertices[meshComp.indices[i + 1]];
         const Vertex3D &v2 = meshComp.vertices[meshComp.indices[i + 2]];
 
-        // 1. Transform vertices to World Space
+        // 1. World Space Transformation
         Vector3 w0 = globalTrans.xform(v0.position);
         Vector3 w1 = globalTrans.xform(v1.position);
         Vector3 w2 = globalTrans.xform(v2.position);
 
-        // 2. Exact 3D World-Space Normal & Backface Culling
+        // 2. Normal & Backface Culling
         Vector3 faceNorm = (w1 - w0).cross(w2 - w0);
         Vector3 toCam = activeCamTransform.origin - w0;
         bool isBackFacing = (faceNorm.dot(toCam) < 0.0f);
         if (isBackFacing && meshComp.cullBackfaces) continue;
 
-        // 3. Transform vertices to Camera View Space
+        // 3. Camera View Space Transformation
         Vector3 cam0 = viewInv.xform(w0);
         Vector3 cam1 = viewInv.xform(w1);
         Vector3 cam2 = viewInv.xform(w2);
@@ -222,7 +240,6 @@ public:
         float z1 = -cam1.z;
         float z2 = -cam2.z;
 
-        // Clip triangle if completely behind near clipping plane
         if (z0 <= nearPlane && z1 <= nearPlane && z2 <= nearPlane) continue;
 
         float safeZ0 = std::max(z0, nearPlane);
@@ -233,7 +250,7 @@ public:
         float invZ1 = 1.0f / safeZ1;
         float invZ2 = 1.0f / safeZ2;
 
-        // 4. Screen Projection
+        // 4. Sub-Pixel Screen Projection
         float x0 = (cam0.x * f / aspect) * invZ0 * halfW + halfW;
         float y0 = (1.0f - (cam0.y * f) * invZ0) * halfH;
 
@@ -247,12 +264,7 @@ public:
         Vector3 n0 = normalBasis.xform(v0.normal).normalized();
         Vector3 n1 = normalBasis.xform(v1.normal).normalized();
         Vector3 n2 = normalBasis.xform(v2.normal).normalized();
-
-        if (isBackFacing) {
-          n0 = -n0;
-          n1 = -n1;
-          n2 = -n2;
-        }
+        if (isBackFacing) { n0 = -n0; n1 = -n1; n2 = -n2; }
 
         auto computeVertexColor = [&](const Vector3 &pos, const Vector3 &norm, const Color &baseCol) -> Color {
           float totalR = ambientColor.r;
@@ -267,7 +279,7 @@ public:
             totalB += dl.color.b * dl.energy * ndotl;
           }
 
-          // Point Lights
+          // Omni Point Lights
           for (const auto &pl : pointLights) {
             Vector3 toLight = pl.pos - pos;
             float dist = toLight.length();
@@ -282,7 +294,7 @@ public:
             }
           }
 
-          Color finalCol = baseCol * meshComp.albedoColor * Color(totalR, totalG, totalB, 1.0f);
+          Color finalCol = baseCol * meshComp.albedoColor * Color(totalR, totalG, totalB, 1.0f) + (meshComp.emissionColor * meshComp.emissionEnergy);
           return Color(
               std::clamp(finalCol.r, 0.0f, 1.0f),
               std::clamp(finalCol.g, 0.0f, 1.0f),
@@ -294,93 +306,114 @@ public:
         Color c1 = computeVertexColor(w1, n1, v1.color);
         Color c2 = computeVertexColor(w2, n2, v2.color);
 
-        // 6. Ultra-Fast Linear DDA Scanline Rasterizer
+        // 6. High-Performance Edge-Stepping Span Rasterizer with Z-Buffering
         float denom = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2);
         if (std::abs(denom) < 0.0001f) continue;
         float invDenom = 1.0f / denom;
 
-        int minX = std::max(0, static_cast<int>(std::floor(std::min({x0, x1, x2}))));
-        int maxX = std::min(w - 1, static_cast<int>(std::ceil(std::max({x0, x1, x2}))));
         int minY = std::max(0, static_cast<int>(std::floor(std::min({y0, y1, y2}))));
         int maxY = std::min(h - 1, static_cast<int>(std::ceil(std::max({y0, y1, y2}))));
-
-        if (minX > maxX || minY > maxY) continue;
-
-        float dw0_dx = (y1 - y2) * invDenom;
-        float dw0_dy = (x2 - x1) * invDenom;
-        float dw1_dx = (y2 - y0) * invDenom;
-        float dw1_dy = (x0 - x2) * invDenom;
+        if (minY > maxY) continue;
 
         float dInvZ_dx = ((invZ0 - invZ2) * (y1 - y2) + (invZ1 - invZ2) * (y2 - y0)) * invDenom;
-        float dInvZ_dy = ((invZ0 - invZ2) * (x2 - x1) + (invZ1 - invZ2) * (x0 - x2)) * invDenom;
-
         float dR_dx = ((c0.r - c2.r) * (y1 - y2) + (c1.r - c2.r) * (y2 - y0)) * invDenom;
-        float dR_dy = ((c0.r - c2.r) * (x2 - x1) + (c1.r - c2.r) * (x0 - x2)) * invDenom;
-
         float dG_dx = ((c0.g - c2.g) * (y1 - y2) + (c1.g - c2.g) * (y2 - y0)) * invDenom;
-        float dG_dy = ((c0.g - c2.g) * (x2 - x1) + (c1.g - c2.g) * (x0 - x2)) * invDenom;
-
         float dB_dx = ((c0.b - c2.b) * (y1 - y2) + (c1.b - c2.b) * (y2 - y0)) * invDenom;
-        float dB_dy = ((c0.b - c2.b) * (x2 - x1) + (c1.b - c2.b) * (x0 - x2)) * invDenom;
 
-        float startPX = static_cast<float>(minX) + 0.5f;
-        float startPY = static_cast<float>(minY) + 0.5f;
+        for (int py = minY; py <= maxY; ++py) {
+          float curY = static_cast<float>(py) + 0.5f;
 
-        float row_w0 = ((y1 - y2) * (startPX - x2) + (x2 - x1) * (startPY - y2)) * invDenom;
-        float row_w1 = ((y2 - y0) * (startPX - x2) + (x0 - x2) * (startPY - y2)) * invDenom;
+          // Find span endpoints for scanline py
+          float xA = 0.0f, xB = 0.0f;
+          bool hasA = false, hasB = false;
 
-        float row_invZ = invZ2 + row_w0 * (invZ0 - invZ2) + row_w1 * (invZ1 - invZ2);
-        float row_r = c2.r + row_w0 * (c0.r - c2.r) + row_w1 * (c1.r - c2.r);
-        float row_g = c2.g + row_w0 * (c0.g - c2.g) + row_w1 * (c1.g - c2.g);
-        float row_b = c2.b + row_w0 * (c0.b - c2.b) + row_w1 * (c1.b - c2.b);
-
-        for (int py_i = minY; py_i <= maxY; ++py_i) {
-          int rowOffset = py_i * w;
-          float w0_b = row_w0;
-          float w1_b = row_w1;
-          float cur_invZ = row_invZ;
-          float cur_r = row_r;
-          float cur_g = row_g;
-          float cur_b = row_b;
-
-          for (int px_i = minX; px_i <= maxX; ++px_i) {
-            float w2_b = 1.0f - w0_b - w1_b;
-
-            if (w0_b >= 0.0f && w1_b >= 0.0f && w2_b >= 0.0f) {
-              int pixelIdx = rowOffset + px_i;
-
-              if (cur_invZ > s_depthBuffer[pixelIdx]) {
-                s_depthBuffer[pixelIdx] = cur_invZ;
-
-                uint32_t r_byte = static_cast<uint32_t>(std::clamp(cur_r, 0.0f, 1.0f) * 255.0f);
-                uint32_t g_byte = static_cast<uint32_t>(std::clamp(cur_g, 0.0f, 1.0f) * 255.0f);
-                uint32_t b_byte = static_cast<uint32_t>(std::clamp(cur_b, 0.0f, 1.0f) * 255.0f);
-
-                s_colorBuffer[pixelIdx] = 0xFF000000 | (r_byte << 16) | (g_byte << 8) | b_byte;
-              }
+          auto checkEdge = [&](float ax, float ay, float bx, float by) {
+            if ((ay <= curY && by > curY) || (by <= curY && ay > curY)) {
+              float t = (curY - ay) / (by - ay);
+              float ix = ax + t * (bx - ax);
+              if (!hasA) { xA = ix; hasA = true; }
+              else { xB = ix; hasB = true; }
             }
+          };
 
-            w0_b += dw0_dx;
-            w1_b += dw1_dx;
-            cur_invZ += dInvZ_dx;
-            cur_r += dR_dx;
-            cur_g += dG_dx;
-            cur_b += dB_dx;
+          checkEdge(x0, y0, x1, y1);
+          checkEdge(x1, y1, x2, y2);
+          checkEdge(x2, y2, x0, y0);
+
+          if (!hasA || !hasB) continue;
+          if (xA > xB) std::swap(xA, xB);
+
+          int startX = std::max(0, static_cast<int>(std::ceil(xA)));
+          int endX = std::min(w - 1, static_cast<int>(std::floor(xB)));
+          if (startX > endX) continue;
+
+          float startPX = static_cast<float>(startX) + 0.5f;
+          float w0 = ((y1 - y2) * (startPX - x2) + (x2 - x1) * (curY - y2)) * invDenom;
+          float w1 = ((y2 - y0) * (startPX - x2) + (x0 - x2) * (curY - y2)) * invDenom;
+
+          float curInvZ = invZ2 + w0 * (invZ0 - invZ2) + w1 * (invZ1 - invZ2);
+          float curR = c2.r + w0 * (c0.r - c2.r) + w1 * (c1.r - c2.r);
+          float curG = c2.g + w0 * (c0.g - c2.g) + w1 * (c1.g - c2.g);
+          float curB = c2.b + w0 * (c0.b - c2.b) + w1 * (c1.b - c2.b);
+
+          int rowOffset = py * w;
+          float *depthRow = &s_depthBuffer[rowOffset];
+          uint32_t *colorRow = &s_colorBuffer[rowOffset];
+
+          for (int px = startX; px <= endX; ++px) {
+            if (curInvZ > depthRow[px]) {
+              depthRow[px] = curInvZ;
+
+              int r_int = static_cast<int>(curR * 255.0f);
+              int g_int = static_cast<int>(curG * 255.0f);
+              int b_int = static_cast<int>(curB * 255.0f);
+
+              uint32_t r_byte = (r_int < 0) ? 0 : ((r_int > 255) ? 255 : r_int);
+              uint32_t g_byte = (g_int < 0) ? 0 : ((g_int > 255) ? 255 : g_int);
+              uint32_t b_byte = (b_int < 0) ? 0 : ((b_int > 255) ? 255 : b_int);
+
+              colorRow[px] = 0xFF000000 | (r_byte << 16) | (g_byte << 8) | b_byte;
+            }
+            curInvZ += dInvZ_dx;
+            curR += dR_dx;
+            curG += dG_dx;
+            curB += dB_dx;
           }
-
-          row_w0 += dw0_dy;
-          row_w1 += dw1_dy;
-          row_invZ += dInvZ_dy;
-          row_r += dR_dy;
-          row_g += dG_dy;
-          row_b += dB_dy;
         }
       }
     }
 
-    // 7. Blit Hardware-Accelerated 3D Framebuffer to Screen (with Bilinear Upscaling)
-    SDL_UpdateTexture(s_framebufferTexture, nullptr, s_colorBuffer.data(), w * sizeof(uint32_t));
+    // 7. Blit Pixel-Accurate 3D Framebuffer to Screen
     SDL_FRect dstRect{0.0f, 0.0f, viewportWidth, viewportHeight};
+    SDL_UpdateTexture(s_framebufferTexture, nullptr, s_colorBuffer.data(), w * sizeof(uint32_t));
     SDL_RenderTexture(sdlRenderer, s_framebufferTexture, nullptr, &dstRect);
+
+    // 8. Radiant Glowing Halos for Coins via Additive GPU Blending
+    if (env && env->glowEnabled && !glowHalos.empty()) {
+      for (const auto &halo : glowHalos) {
+        float r = halo.radius;
+        SDL_FColor innerCol{std::clamp(halo.color.r * 0.9f, 0.0f, 1.0f),
+                            std::clamp(halo.color.g * 0.9f, 0.0f, 1.0f),
+                            std::clamp(halo.color.b * 0.9f, 0.0f, 1.0f), 0.75f};
+        SDL_FColor outerCol{halo.color.r * 0.35f, halo.color.g * 0.35f, halo.color.b * 0.35f, 0.0f};
+
+        SDL_Vertex haloVerts[5] = {
+            {{halo.screenPos.x, halo.screenPos.y}, innerCol, {0.5f, 0.5f}},
+            {{halo.screenPos.x - r, halo.screenPos.y - r}, outerCol, {0.0f, 0.0f}},
+            {{halo.screenPos.x + r, halo.screenPos.y - r}, outerCol, {1.0f, 0.0f}},
+            {{halo.screenPos.x + r, halo.screenPos.y + r}, outerCol, {1.0f, 1.0f}},
+            {{halo.screenPos.x - r, halo.screenPos.y + r}, outerCol, {0.0f, 1.0f}}
+        };
+        int haloIndices[12] = {
+            0, 1, 2,
+            0, 2, 3,
+            0, 3, 4,
+            0, 4, 1
+        };
+        SDL_SetRenderDrawBlendMode(sdlRenderer, SDL_BLENDMODE_ADD);
+        SDL_RenderGeometry(sdlRenderer, nullptr, haloVerts, 5, haloIndices, 12);
+        SDL_SetRenderDrawBlendMode(sdlRenderer, SDL_BLENDMODE_BLEND);
+      }
+    }
   }
 };

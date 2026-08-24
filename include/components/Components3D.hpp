@@ -46,6 +46,8 @@ struct Mesh3DComponent {
   Ref<StandardMaterial3D> material = nullptr;
   float roughness = 0.5f;
   float metallic = 0.0f;
+  Color emissionColor = Color::BLACK;
+  float emissionEnergy = 0.0f;
   bool castShadow = true;
   bool visible = true;
   bool cullBackfaces = true; // By default cull back-faces for solid 3D geometry
