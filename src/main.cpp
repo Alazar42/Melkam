@@ -61,14 +61,17 @@ private:
   Ref<Label> m_coinCountLabel = nullptr;
   Ref<Label> m_shadowStatusLabel = nullptr;
 
-  // 3D Glowing Coins
+  // 3D Glowing Coins with Area3D Triggers & Spatial Audio
   struct Coin3D {
     Ref<MeshInstance3D> meshNode;
+    Ref<Area3D> triggerArea;
+    Ref<AudioStreamPlayer3D> audioPlayer;
     Vector3 basePos;
     bool collected = false;
     float bobOffset = 0.0f;
   };
   std::vector<Coin3D> m_coins;
+  Ref<Area3D> m_jumpPadArea = nullptr;
   int m_collectedCoinCount = 0;
   float m_coinAngle = 0.0f;
 };
@@ -352,31 +355,35 @@ void Showcase3DScene::onReady() {
   coinGlowLight->lightEnergy = 1.4f;
   coinGlowLight->omniRange = 14.0f;
 
-  // 3. Static Physics Ground Floor (StaticBody3D + CollisionShape3D + PlaneMesh)
+  // 3. Static Physics Ground Floor (StaticBody3D + CollisionShape3D + Textured PlaneMesh)
   m_floorBody = addChild<StaticBody3D>();
   m_floorBody->setPosition(Vector3(0.0f, -0.1f, 0.0f));
 
   auto floorCol = m_floorBody->addChild<CollisionShape3D>(std::make_shared<BoxShape3D>(Vector3(18.0f, 0.2f, 18.0f)));
   (void)floorCol;
 
-  auto floorMat = StandardMaterial3D::create(Color::from_rgba8(35, 42, 60));
+  auto floorMat = StandardMaterial3D::create(Color::from_rgba8(210, 220, 235));
+  floorMat->setTexture(makeRef<Texture2D>("assets/sprites/grass_platform.png"));
+  floorMat->setUvScale(Vector2(6.0f, 6.0f));
   floorMat->cullMode = CullMode3D::Disabled;
 
   m_floorMesh = m_floorBody->addChild<MeshInstance3D>(PlaneMesh::create(Vector2(18.0f, 18.0f)));
   m_floorMesh->setMaterial(floorMat);
 
-  // 4. Third-Person CharacterBody3D (Player)
+  // 4. Third-Person CharacterBody3D (Player with glTF 2.0 Model)
   m_player = addChild<CharacterBody3D>();
   m_player->setPosition(Vector3(0.0f, 2.0f, 0.0f));
 
   auto playerCol = m_player->addChild<CollisionShape3D>(std::make_shared<BoxShape3D>(Vector3(0.8f, 1.8f, 0.8f)));
   (void)playerCol;
 
-  auto heroMat = StandardMaterial3D::create(Color::from_rgba8(40, 140, 255));
+  auto heroMat = StandardMaterial3D::create(Color::WHITE);
+  heroMat->setTexture(makeRef<Texture2D>("assets/models/character_skin.jpg"));
   heroMat->metallic = 0.5f;
   heroMat->roughness = 0.3f;
 
-  m_playerMesh = m_player->addChild<MeshInstance3D>(BoxMesh::create(Vector3(0.8f, 1.8f, 0.8f)));
+  auto characterMesh = GLTFLoader::load("assets/models/character.gltf");
+  m_playerMesh = m_player->addChild<MeshInstance3D>(characterMesh);
   m_playerMesh->setMaterial(heroMat);
   m_playerMesh->setCastShadowsSetting(ShadowCastingSetting3D::On);
 
@@ -392,8 +399,9 @@ void Showcase3DScene::onReady() {
   m_camera->fov = 70.0f;
   m_camera->makeCurrent();
 
-  // 7. Step-Up Obstacle Crate (StaticBody3D + CollisionShape3D)
-  auto crateMat = StandardMaterial3D::create(Color::from_rgba8(175, 130, 75));
+  // 7. Step-Up Obstacle Crate (Textured BoxMesh + StaticBody3D)
+  auto crateMat = StandardMaterial3D::create(Color::from_rgba8(240, 215, 175));
+  crateMat->setTexture(makeRef<Texture2D>("assets/sprites/player_smiley.png"));
   crateMat->metallic = 0.0f;
   crateMat->roughness = 0.85f;
 
@@ -414,7 +422,45 @@ void Showcase3DScene::onReady() {
   m_sphere->setMaterial(aquaMat);
   m_sphere->setCastShadowsSetting(ShadowCastingSetting3D::On);
 
-  // 8.5. 3D Glowing Golden Collectible Coins
+  // 8.6. Custom 3D Model loaded via Wavefront OBJ Parser (Ancient Monolith)
+  auto monolithMesh = OBJLoader::load("assets/models/monolith.obj");
+  auto monolith = addChild<MeshInstance3D>(monolithMesh);
+  monolith->setPosition(Vector3(-5.5f, 0.0f, -5.5f));
+  auto monolithMat = StandardMaterial3D::create(Color::from_rgba8(170, 185, 215));
+  monolithMat->metallic = 0.4f;
+  monolithMat->roughness = 0.35f;
+  monolith->setMaterial(monolithMat);
+  monolith->setCastShadowsSetting(ShadowCastingSetting3D::On);
+
+  auto monoBody = addChild<StaticBody3D>();
+  monoBody->setPosition(Vector3(-5.5f, 1.4f, -5.5f));
+  monoBody->addChild<CollisionShape3D>(std::make_shared<BoxShape3D>(Vector3(1.6f, 2.8f, 1.6f)));
+
+  // 8.7. Spring Jump Pad (Area3D + 3D Spatial Audio)
+  m_jumpPadArea = addChild<Area3D>("JumpPadArea");
+  m_jumpPadArea->setPosition(Vector3(-2.5f, 0.05f, 3.5f));
+  m_jumpPadArea->addChild<CollisionShape3D>(std::make_shared<CylinderShape3D>(1.3f, 0.4f));
+
+  auto padMesh = m_jumpPadArea->addChild<MeshInstance3D>(CylinderMesh::create(1.3f, 0.2f));
+  auto padMat = StandardMaterial3D::create(Color::from_rgba8(30, 230, 190));
+  padMat->emissionColor = Color::from_rgba8(15, 245, 200);
+  padMat->emissionEnergy = 1.3f;
+  padMesh->setMaterial(padMat);
+  padMesh->setCastShadowsSetting(ShadowCastingSetting3D::On);
+
+  auto padAudio = m_jumpPadArea->addChild<AudioStreamPlayer3D>("PadAudio");
+  padAudio->unitSize = 4.0f;
+  padAudio->maxDistance = 45.0f;
+
+  m_jumpPadArea->body_entered.connect([this, padAudio](Node3D *body) {
+    if (body == m_player.get()) {
+      m_player->velocity.y = 16.5f; // Super high spring jump!
+      padAudio->playJump();
+      std::cout << "=== [3D SHOWCASE] Area3D Jump Pad Activated (3D Spatial Jump Audio Played)! ===" << std::endl;
+    }
+  });
+
+  // 8.8. 3D Glowing Golden Collectible Coins with Area3D & Spatial Audio
   auto goldCoinMat = StandardMaterial3D::create(Color::from_rgba8(255, 215, 0));
   goldCoinMat->roughness = 0.15f;
   goldCoinMat->metallic = 0.95f;
@@ -438,7 +484,27 @@ void Showcase3DScene::onReady() {
     coinMesh->setPosition(coinPositions[i]);
     coinMesh->setMaterial(goldCoinMat);
     coinMesh->setCastShadowsSetting(ShadowCastingSetting3D::Off);
-    m_coins.push_back({coinMesh, coinPositions[i], false, static_cast<float>(i) * 1.05f});
+
+    auto coinArea = addChild<Area3D>("CoinArea_" + std::to_string(i));
+    coinArea->setPosition(coinPositions[i]);
+    coinArea->addChild<CollisionShape3D>(std::make_shared<SphereShape3D>(1.0f));
+
+    auto coinAudio = coinArea->addChild<AudioStreamPlayer3D>("CoinAudio_" + std::to_string(i));
+    coinAudio->unitSize = 3.0f;
+    coinAudio->maxDistance = 35.0f;
+
+    size_t coinIdx = i;
+    coinArea->body_entered.connect([this, coinIdx, coinMesh, coinAudio](Node3D *body) {
+      if (body == m_player.get() && !m_coins[coinIdx].collected) {
+        m_coins[coinIdx].collected = true;
+        coinMesh->setVisible(false);
+        coinAudio->playChime();
+        m_collectedCoinCount++;
+        std::cout << "=== [3D SHOWCASE] Area3D Coin Collected (" << m_collectedCoinCount << " / " << m_coins.size() << ") with 3D Positional Audio ===" << std::endl;
+      }
+    });
+
+    m_coins.push_back({coinMesh, coinArea, coinAudio, coinPositions[i], false, static_cast<float>(i) * 1.05f});
   }
 
   // 9. UI HUD Overlay
@@ -452,31 +518,31 @@ void Showcase3DScene::onReady() {
   // Left Panel: Controls & Navigation
   auto panel = overlay->addChild<Panel>();
   panel->setPosition({24.0f, 24.0f});
-  panel->setSize({380.0f, 275.0f});
+  panel->setSize({380.0f, 290.0f});
   panel->backgroundColor = Color::from_rgba8(18, 22, 34, 235);
   panel->borderColor = Color::from_rgba8(70, 90, 140);
   panel->borderWidth = 1.5f;
   panel->cornerRadius = 8.0f;
 
-  auto vbox = panel->addChild<VBoxContainer>(5.0f);
-  vbox->setPosition({14.0f, 12.0f});
-  vbox->setSize({352.0f, 251.0f});
+  auto vbox = panel->addChild<VBoxContainer>(4.0f);
+  vbox->setPosition({14.0f, 10.0f});
+  vbox->setSize({352.0f, 270.0f});
 
   vbox->addChild<Label>("3D THIRD-PERSON CONTROLLER", 15.0f, Color::GOLD);
-  vbox->addChild<Label>("• Walk: W/A/S/D or Arrow Keys", 11.5f, Color::from_rgba8(100, 230, 160));
-  vbox->addChild<Label>("• Jump: SPACE (Bullet 3 Kinematic Step)", 11.5f, Color::from_rgba8(120, 220, 255));
-  vbox->addChild<Label>("• Look Around: Mouse (Locked by Default)", 11.5f, Color::from_rgba8(255, 215, 80));
-  vbox->addChild<Label>("• Unlock / Lock Mouse: ESC Key or Click", 11.5f, Color::from_rgba8(255, 140, 100));
-  vbox->addChild<Label>("• Toggle Shadows: 'T' Key (Light3D Toggle)", 11.5f, Color::from_rgba8(255, 180, 100));
-  vbox->addChild<Label>("• Collect: 3D Glowing Gold Coins", 11.5f, Color::from_rgba8(255, 230, 80));
-  vbox->addChild<Label>("• Zoom Boom: Mouse Scroll Wheel", 11.5f, Color::from_rgba8(255, 215, 80));
-  vbox->addChild<Label>("• Nodes: CharacterBody3D + SpringArm3D", 11.5f, Color::from_rgba8(170, 190, 230));
+  vbox->addChild<Label>("• Walk: W/A/S/D or Arrow Keys", 11.0f, Color::from_rgba8(100, 230, 160));
+  vbox->addChild<Label>("• Jump: SPACE (Bullet 3 Kinematic Step)", 11.0f, Color::from_rgba8(120, 220, 255));
+  vbox->addChild<Label>("• Jump Pad: Area3D Trigger + Super Jump", 11.0f, Color::from_rgba8(40, 240, 200));
+  vbox->addChild<Label>("• Spatial Audio: 3D Positional Chimes", 11.0f, Color::from_rgba8(255, 200, 120));
+  vbox->addChild<Label>("• OBJ Model: Ancient Monolith (.obj)", 11.0f, Color::from_rgba8(170, 190, 240));
+  vbox->addChild<Label>("• Texture Maps: UV Diffuse + Normal", 11.0f, Color::from_rgba8(240, 190, 150));
+  vbox->addChild<Label>("• Toggle Shadows: 'T' Key (Light3D Toggle)", 11.0f, Color::from_rgba8(255, 180, 100));
+  vbox->addChild<Label>("• Unlock / Lock Mouse: ESC Key or Click", 11.0f, Color::from_rgba8(255, 140, 100));
 
   vbox->addChild<HSeparator>();
 
   auto backBtn = vbox->addChild<Button>(IconType::ChevronLeft, "Return to Main Menu");
-  backBtn->customMinimumSize = {352.0f, 28.0f};
-  backBtn->fontSize = 12.0f;
+  backBtn->customMinimumSize = {352.0f, 26.0f};
+  backBtn->fontSize = 11.5f;
   backBtn->pressed.connect([this]() {
     std::cout << "=== Returning to Main Menu ===" << std::endl;
     Input::setMouseMode(MouseMode::Visible);
@@ -506,7 +572,7 @@ void Showcase3DScene::onReady() {
   m_coinCountLabel = diagVbox->addChild<Label>("Golden Coins: 0 / 6 Collected", 12.0f, Color::from_rgba8(255, 220, 50));
   
   diagVbox->addChild<HSeparator>();
-  diagVbox->addChild<Label>("Renderer: 3D Vulkan PBR Software Rasterizer (60+ FPS)", 11.0f, Color::from_rgba8(150, 170, 200));
+  diagVbox->addChild<Label>("Renderer: 3D Vulkan PBR + Textures + Shadows (60+ FPS)", 11.0f, Color::from_rgba8(150, 170, 200));
 }
 
 void Showcase3DScene::onProcess(float delta) {
@@ -585,6 +651,17 @@ void Showcase3DScene::onProcess(float delta) {
     }
   }
 
+  // 1.5. Update Area3D Triggers (Jump Pad & Coins)
+  if (m_jumpPadArea && m_player) {
+    m_jumpPadArea->updateOverlaps({m_player.get()});
+  }
+
+  for (auto &coin : m_coins) {
+    if (!coin.collected && coin.triggerArea && m_player) {
+      coin.triggerArea->updateOverlaps({m_player.get()});
+    }
+  }
+
   // 2. Real-Time HUD Metrics Update (using Time subsystem)
   if (m_fpsLabel) {
     float fps = Time::getFPS();
@@ -634,7 +711,7 @@ void Showcase3DScene::onProcess(float delta) {
     }
   }
 
-  // 3. Update 3D Glowing Golden Coins & Collection
+  // 3. Update 3D Glowing Golden Coins (Rotation and Floating Bob)
   m_coinAngle += delta * 3.5f;
   for (size_t i = 0; i < m_coins.size(); ++i) {
     auto &coin = m_coins[i];
@@ -643,17 +720,6 @@ void Showcase3DScene::onProcess(float delta) {
     float yBob = std::sin(m_coinAngle + coin.bobOffset) * 0.15f;
     coin.meshNode->setPosition(Vector3(coin.basePos.x, coin.basePos.y + yBob, coin.basePos.z));
     coin.meshNode->setRotation(Vector3(0.2f, m_coinAngle + coin.bobOffset, 0.0f));
-
-    if (m_player) {
-      Vector3 ppos = m_player->getPosition();
-      Vector3 diff = ppos - coin.basePos;
-      if (std::sqrt(diff.x * diff.x + diff.z * diff.z) < 1.3f && std::abs(diff.y) < 1.5f) {
-        coin.collected = true;
-        coin.meshNode->setVisible(false);
-        m_collectedCoinCount++;
-        std::cout << "=== [3D SHOWCASE] Golden Coin Collected! (" << m_collectedCoinCount << " / " << m_coins.size() << ") ===" << std::endl;
-      }
-    }
   }
 
   if (m_coinCountLabel) {
@@ -667,7 +733,7 @@ void Showcase3DScene::onProcess(float delta) {
     }
   }
 
-  // 3. Decorative rotating sphere
+  // 4. Decorative rotating sphere
   if (m_sphere) {
     m_orbitAngle += delta * 1.5f;
     float radius = 3.0f;

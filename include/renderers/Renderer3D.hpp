@@ -447,7 +447,27 @@ public:
         Color c1 = computeVertexColor(w1, n1, v1.color);
         Color c2 = computeVertexColor(w2, n2, v2.color);
 
-        // 6. High-Performance Edge-Stepping Span Rasterizer with Z-Buffering
+        // Texture and UV coordinate parameters
+        const Texture2D *albedoTex = (meshComp.material && meshComp.material->albedoTexture && meshComp.material->albedoTexture->hasPixels()) 
+                                      ? meshComp.material->albedoTexture.get() : nullptr;
+        Vector2 uvScale = meshComp.material ? meshComp.material->uvScale : Vector2(1.0f, 1.0f);
+        Vector2 uvOffset = meshComp.material ? meshComp.material->uvOffset : Vector2(0.0f, 0.0f);
+
+        float u0 = v0.uv.x * uvScale.x + uvOffset.x;
+        float v0_coord = v0.uv.y * uvScale.y + uvOffset.y;
+        float u1 = v1.uv.x * uvScale.x + uvOffset.x;
+        float v1_coord = v1.uv.y * uvScale.y + uvOffset.y;
+        float u2 = v2.uv.x * uvScale.x + uvOffset.x;
+        float v2_coord = v2.uv.y * uvScale.y + uvOffset.y;
+
+        float u0_invZ = u0 * invZ0;
+        float v0_invZ = v0_coord * invZ0;
+        float u1_invZ = u1 * invZ1;
+        float v1_invZ = v1_coord * invZ1;
+        float u2_invZ = u2 * invZ2;
+        float v2_invZ = v2_coord * invZ2;
+
+        // 6. High-Performance Edge-Stepping Span Rasterizer with Z-Buffering & Texture Mapping
         float denom = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2);
         if (std::abs(denom) < 0.0001f) continue;
         float invDenom = 1.0f / denom;
@@ -460,6 +480,8 @@ public:
         float dR_dx = ((c0.r - c2.r) * (y1 - y2) + (c1.r - c2.r) * (y2 - y0)) * invDenom;
         float dG_dx = ((c0.g - c2.g) * (y1 - y2) + (c1.g - c2.g) * (y2 - y0)) * invDenom;
         float dB_dx = ((c0.b - c2.b) * (y1 - y2) + (c1.b - c2.b) * (y2 - y0)) * invDenom;
+        float dU_dx = ((u0_invZ - u2_invZ) * (y1 - y2) + (u1_invZ - u2_invZ) * (y2 - y0)) * invDenom;
+        float dV_dx = ((v0_invZ - v2_invZ) * (y1 - y2) + (v1_invZ - v2_invZ) * (y2 - y0)) * invDenom;
 
         for (int py = minY; py <= maxY; ++py) {
           float curY = static_cast<float>(py) + 0.5f;
@@ -496,29 +518,86 @@ public:
           float curR = c2.r + w0 * (c0.r - c2.r) + w1 * (c1.r - c2.r);
           float curG = c2.g + w0 * (c0.g - c2.g) + w1 * (c1.g - c2.g);
           float curB = c2.b + w0 * (c0.b - c2.b) + w1 * (c1.b - c2.b);
+          float curU = u2_invZ + w0 * (u0_invZ - u2_invZ) + w1 * (u1_invZ - u2_invZ);
+          float curV = v2_invZ + w0 * (v0_invZ - v2_invZ) + w1 * (v1_invZ - v2_invZ);
 
           int rowOffset = py * w;
           float *depthRow = &s_depthBuffer[rowOffset];
           uint32_t *colorRow = &s_colorBuffer[rowOffset];
 
-          for (int px = startX; px <= endX; ++px) {
-            if (curInvZ > depthRow[px]) {
-              depthRow[px] = curInvZ;
+          int curR_i = static_cast<int>(curR * 255.0f);
+          int curG_i = static_cast<int>(curG * 255.0f);
+          int curB_i = static_cast<int>(curB * 255.0f);
+          int dR_i = static_cast<int>(dR_dx * 255.0f);
+          int dG_i = static_cast<int>(dG_dx * 255.0f);
+          int dB_i = static_cast<int>(dB_dx * 255.0f);
 
-              int r_int = static_cast<int>(curR * 255.0f);
-              int g_int = static_cast<int>(curG * 255.0f);
-              int b_int = static_cast<int>(curB * 255.0f);
-
-              uint32_t r_byte = (r_int < 0) ? 0 : ((r_int > 255) ? 255 : r_int);
-              uint32_t g_byte = (g_int < 0) ? 0 : ((g_int > 255) ? 255 : g_int);
-              uint32_t b_byte = (b_int < 0) ? 0 : ((b_int > 255) ? 255 : b_int);
-
-              colorRow[px] = 0xFF000000 | (r_byte << 16) | (g_byte << 8) | b_byte;
+          if (!albedoTex) {
+            // Blazing-fast flat shaded span (zero division, zero float casts)
+            for (int px = startX; px <= endX; ++px) {
+              if (curInvZ > depthRow[px]) {
+                depthRow[px] = curInvZ;
+                uint8_t r = static_cast<uint8_t>(std::clamp(curR_i, 0, 255));
+                uint8_t g = static_cast<uint8_t>(std::clamp(curG_i, 0, 255));
+                uint8_t b = static_cast<uint8_t>(std::clamp(curB_i, 0, 255));
+                colorRow[px] = 0xFF000000 | (r << 16) | (g << 8) | b;
+              }
+              curInvZ += dInvZ_dx;
+              curR_i += dR_i;
+              curG_i += dG_i;
+              curB_i += dB_i;
             }
-            curInvZ += dInvZ_dx;
-            curR += dR_dx;
-            curG += dG_dx;
-            curB += dB_dx;
+          } else {
+            // High-performance 8-pixel subdivided affine texture span
+            int texW = albedoTex->getWidth();
+            int texH = albedoTex->getHeight();
+            float fTexW = static_cast<float>(texW);
+            float fTexH = static_cast<float>(texH);
+
+            int px = startX;
+            while (px <= endX) {
+              int nextX = std::min(px + 8, endX + 1);
+              int chunkLen = nextX - px;
+
+              float z0_chunk = 1.0f / curInvZ;
+              float u0_px = curU * z0_chunk * fTexW;
+              float v0_px = curV * z0_chunk * fTexH;
+
+              float invZ_end = curInvZ + dInvZ_dx * static_cast<float>(chunkLen);
+              float u_end = curU + dU_dx * static_cast<float>(chunkLen);
+              float v_end = curV + dV_dx * static_cast<float>(chunkLen);
+              float z_end = 1.0f / invZ_end;
+              float u1_px = u_end * z_end * fTexW;
+              float v1_px = v_end * z_end * fTexH;
+
+              float invChunk = 1.0f / static_cast<float>(chunkLen);
+              int u_fx = static_cast<int>(u0_px * 65536.0f);
+              int v_fx = static_cast<int>(v0_px * 65536.0f);
+              int du_fx = static_cast<int>((u1_px - u0_px) * invChunk * 65536.0f);
+              int dv_fx = static_cast<int>((v1_px - v0_px) * invChunk * 65536.0f);
+
+              for (int i = 0; i < chunkLen; ++i) {
+                int curPX = px + i;
+                if (curInvZ > depthRow[curPX]) {
+                  depthRow[curPX] = curInvZ;
+                  uint32_t texSample = albedoTex->sampleFast(u_fx, v_fx);
+                  uint32_t r = (((texSample >> 16) & 0xFF) * static_cast<uint32_t>(std::clamp(curR_i, 0, 255))) >> 8;
+                  uint32_t g = (((texSample >> 8) & 0xFF) * static_cast<uint32_t>(std::clamp(curG_i, 0, 255))) >> 8;
+                  uint32_t b = ((texSample & 0xFF) * static_cast<uint32_t>(std::clamp(curB_i, 0, 255))) >> 8;
+                  colorRow[curPX] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                }
+                curInvZ += dInvZ_dx;
+                curR_i += dR_i;
+                curG_i += dG_i;
+                curB_i += dB_i;
+                u_fx += du_fx;
+                v_fx += dv_fx;
+              }
+
+              curU = u_end;
+              curV = v_end;
+              px = nextX;
+            }
           }
         }
       }

@@ -142,6 +142,15 @@ public:
       return false;
     }
 
+    m_pixels.resize(w * h);
+    for (int i = 0; i < w * h; ++i) {
+      uint8_t r = data[i * 4 + 0];
+      uint8_t g = data[i * 4 + 1];
+      uint8_t b = data[i * 4 + 2];
+      uint8_t a = data[i * 4 + 3];
+      m_pixels[i] = (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
     SDL_Surface *surface = SDL_CreateSurfaceFrom(
         w, h, SDL_PIXELFORMAT_RGBA32, data, w * 4);
     if (!surface) {
@@ -163,6 +172,39 @@ public:
     return false;
   }
 
+  // Samples texture color at normalized UV coordinates with wrapping (0.0 to 1.0)
+  uint32_t sampleUV(float u, float v) const {
+    if (m_pixels.empty() || m_width <= 0 || m_height <= 0) return 0xFFFFFFFF;
+    u = u - std::floor(u);
+    v = v - std::floor(v);
+    int x = std::clamp(static_cast<int>(u * static_cast<float>(m_width)), 0, m_width - 1);
+    int y = std::clamp(static_cast<int>(v * static_cast<float>(m_height)), 0, m_height - 1);
+    return m_pixels[y * m_width + x];
+  }
+
+  // Ultra-fast integer fixed-point (16.16) texture sampling with zero float overhead
+  inline uint32_t sampleFast(int u_fixed, int v_fixed) const {
+    if (m_pixels.empty() || m_width <= 0 || m_height <= 0) return 0xFFFFFFFF;
+    int u = (u_fixed >> 16) % m_width;
+    if (u < 0) u += m_width;
+    int v = (v_fixed >> 16) % m_height;
+    if (v < 0) v += m_height;
+    return m_pixels[v * m_width + u];
+  }
+
+  Color sampleColor(float u, float v) const {
+    uint32_t p = sampleUV(u, v);
+    float a = static_cast<float>((p >> 24) & 0xFF) / 255.0f;
+    float r = static_cast<float>((p >> 16) & 0xFF) / 255.0f;
+    float g = static_cast<float>((p >> 8) & 0xFF) / 255.0f;
+    float b = static_cast<float>(p & 0xFF) / 255.0f;
+    return Color(r, g, b, a);
+  }
+
+  const std::vector<uint32_t> &getPixels() const { return m_pixels; }
+  const uint32_t *getRawPixelData() const { return m_pixels.data(); }
+  bool hasPixels() const { return !m_pixels.empty(); }
+
   // Sets default fallback renderer for texture generation.
   static void setDefaultRenderer(SDL_Renderer *renderer) {
     s_defaultRenderer = renderer;
@@ -174,6 +216,7 @@ public:
       SDL_DestroyTexture(m_texture);
       m_texture = nullptr;
     }
+    m_pixels.clear();
     m_width = 0;
     m_height = 0;
   }
@@ -225,6 +268,7 @@ private:
   }
 
   SDL_Texture *m_texture = nullptr;
+  std::vector<uint32_t> m_pixels;
   int m_width = 0;
   int m_height = 0;
   std::string m_path;

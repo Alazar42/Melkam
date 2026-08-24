@@ -34,6 +34,8 @@ class StandardMaterial3D : public Material3D {
 public:
   Color albedoColor = Color::WHITE;
   Ref<Texture2D> albedoTexture = nullptr;
+  Vector2 uvScale = Vector2(1.0f, 1.0f);
+  Vector2 uvOffset = Vector2(0.0f, 0.0f);
 
   float roughness = 0.5f;
   float metallic = 0.0f;
@@ -50,6 +52,11 @@ public:
 
   StandardMaterial3D() = default;
   explicit StandardMaterial3D(const Color &color) : albedoColor(color) {}
+
+  void setTexture(const Ref<Texture2D> &tex) { albedoTexture = tex; }
+  Ref<Texture2D> getTexture() const { return albedoTexture; }
+  void setUvScale(const Vector2 &scale) { uvScale = scale; }
+  Vector2 getUvScale() const { return uvScale; }
 
   Color getAlbedoColor() const override { return albedoColor; }
   CullMode3D getCullMode() const override { return cullMode; }

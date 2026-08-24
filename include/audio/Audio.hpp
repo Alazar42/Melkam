@@ -208,6 +208,61 @@ public:
     s_musicSound = nullptr;
   }
 
+  // Plays a procedural stereo audio buffer with left/right volume panning
+  static void playSpatialBuffer(const int16_t *samples, int sampleCount, int sampleRate, float leftVol, float rightVol) {
+    if (!s_initialized || !s_deviceId || !samples || sampleCount <= 0) return;
+
+    SDL_AudioSpec spec;
+    spec.format = SDL_AUDIO_S16LE;
+    spec.channels = 2;
+    spec.freq = sampleRate;
+
+    SDL_AudioStream *stream = createAudioStream(spec);
+    if (!stream) return;
+
+    std::vector<int16_t> stereo(sampleCount * 2);
+    float master = s_masterVolume;
+    float lGain = std::clamp(leftVol * master, 0.0f, 1.0f);
+    float rGain = std::clamp(rightVol * master, 0.0f, 1.0f);
+
+    for (int i = 0; i < sampleCount; ++i) {
+      stereo[i * 2 + 0] = static_cast<int16_t>(std::clamp(static_cast<float>(samples[i]) * lGain, -32768.0f, 32767.0f));
+      stereo[i * 2 + 1] = static_cast<int16_t>(std::clamp(static_cast<float>(samples[i]) * rGain, -32768.0f, 32767.0f));
+    }
+
+    SDL_PutAudioStreamData(stream, stereo.data(), static_cast<int>(stereo.size() * sizeof(int16_t)));
+    SDL_FlushAudioStream(stream);
+  }
+
+  // Generates high-pitch golden coin pickup chime sound
+  static std::vector<int16_t> createChimeSound(int sampleRate = 44100) {
+    int totalSamples = static_cast<int>(0.35f * sampleRate);
+    std::vector<int16_t> samples(totalSamples);
+    for (int i = 0; i < totalSamples; ++i) {
+      float t = static_cast<float>(i) / static_cast<float>(sampleRate);
+      float decay = std::exp(-8.0f * t);
+      float freq1 = (t < 0.08f) ? 987.77f : 1318.51f; // B5 -> E6
+      float freq2 = 2637.0f; // E7 overtone
+      float wave = 0.7f * std::sin(6.2831853f * freq1 * t) + 0.3f * std::sin(6.2831853f * freq2 * t);
+      samples[i] = static_cast<int16_t>(std::clamp(wave * decay * 28000.0f, -32768.0f, 32767.0f));
+    }
+    return samples;
+  }
+
+  // Generates upward pitch sweep jump pad / spring launch sound
+  static std::vector<int16_t> createJumpPadSound(int sampleRate = 44100) {
+    int totalSamples = static_cast<int>(0.4f * sampleRate);
+    std::vector<int16_t> samples(totalSamples);
+    for (int i = 0; i < totalSamples; ++i) {
+      float t = static_cast<float>(i) / static_cast<float>(sampleRate);
+      float decay = std::exp(-3.5f * t);
+      float freq = 180.0f + 650.0f * (t / 0.4f);
+      float wave = std::sin(6.2831853f * freq * t);
+      samples[i] = static_cast<int16_t>(std::clamp(wave * decay * 26000.0f, -32768.0f, 32767.0f));
+    }
+    return samples;
+  }
+
   // Sets master volume multiplier (0.0f to 1.0f).
   static void setMasterVolume(float volume) {
     s_masterVolume = std::clamp(volume, 0.0f, 1.0f);

@@ -164,8 +164,10 @@
 #include "nodes/3D/GeometryInstance3D.hpp"
 #include "nodes/3D/MeshInstance3D.hpp"
 #include "nodes/3D/Label3D.hpp"
+#include "resources/3D/OBJLoader.hpp"
+#include "resources/3D/GLTFLoader.hpp"
 
-// 3D Cameras & Lights
+// 3D Cameras & Lights & Spatial Audio
 #include "nodes/3D/Camera3D.hpp"
 #include "nodes/3D/CameraController3D.hpp"
 #include "nodes/3D/Light3D.hpp"
@@ -175,6 +177,7 @@
 #include "nodes/3D/WorldEnvironment.hpp"
 #include "nodes/3D/Marker3D.hpp"
 #include "nodes/3D/SpringArm3D.hpp"
+#include "nodes/3D/AudioStreamPlayer3D.hpp"
 
 // 3D Bullet Physics & Collision Bodies
 #include "nodes/3D/physics/Shape3D.hpp"
