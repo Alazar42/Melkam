@@ -49,6 +49,9 @@ public:
     mouseFilter = MouseFilter::Ignore;
   }
 
+  void setText(std::string newText) { text = std::move(newText); }
+  const std::string &getText() const { return text; }
+
   void drawControl() override {
     if (text.empty()) return;
 

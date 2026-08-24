@@ -28,17 +28,33 @@ public:
 class Showcase3DScene : public Node {
 public:
   Showcase3DScene() : Node("Showcase3DScene") {}
+  ~Showcase3DScene() override {
+    PhysicsServer3D::get().clear();
+  }
   void onReady() override;
   void onProcess(float delta) override;
+  void onDestroy() override {
+    PhysicsServer3D::get().clear();
+  }
 
 private:
-  Ref<CameraController3D> m_camera = nullptr;
-  Ref<MeshInstance3D> m_cube = nullptr;
-  Ref<MeshInstance3D> m_sphere = nullptr;
-  Ref<MeshInstance3D> m_plane = nullptr;
+  Ref<WorldEnvironment> m_environment = nullptr;
+  Ref<CharacterBody3D> m_player = nullptr;
+  Ref<MeshInstance3D> m_playerMesh = nullptr;
+  Ref<SpringArm3D> m_springArm = nullptr;
+  Ref<Camera3D> m_camera = nullptr;
   Ref<DirectionalLight3D> m_sunLight = nullptr;
-  Ref<PointLight3D> m_pointLight = nullptr;
+  Ref<OmniLight3D> m_omniLight = nullptr;
+  Ref<StaticBody3D> m_floorBody = nullptr;
+  Ref<MeshInstance3D> m_floorMesh = nullptr;
+  Ref<MeshInstance3D> m_sphere = nullptr;
   float m_orbitAngle = 0.0f;
+
+  // Diagnostic HUD Labels (powered by Time & Physics subsystems)
+  Ref<Label> m_fpsLabel = nullptr;
+  Ref<Label> m_playerPosLabel = nullptr;
+  Ref<Label> m_physicsStatusLabel = nullptr;
+  Ref<Label> m_cameraInfoLabel = nullptr;
 };
 
 // =============================================================================
@@ -287,56 +303,90 @@ void MainMenuScene::onReady() {
 // =============================================================================
 
 void Showcase3DScene::onReady() {
-  std::cout << "=== [3D Vulkan Showcase] Scene Ready ===" << std::endl;
+  std::cout << "=== [3D Third-Person Showcase] Scene Ready ===" << std::endl;
 
-  // 1. CameraController3D Setup (Interactive Orbit & Zoom)
-  m_camera = addChild<CameraController3D>();
-  m_camera->orbitDistance = 7.5f;
-  m_camera->targetPosition = Vector3(0.0f, 0.8f, 0.0f);
-  m_camera->updateOrbitTransform();
-  m_camera->makeCurrent();
+  // 1. World Environment (Sky & ACES Tonemapping)
+  m_environment = addChild<WorldEnvironment>();
+  m_environment->environment->backgroundMode = EnvironmentBGMode::Sky;
+  m_environment->environment->ambientLightColor = Color::from_rgba8(70, 85, 120);
+  m_environment->environment->ambientLightEnergy = 1.0f;
+  m_environment->environment->tonemapMode = TonemapMode3D::ACES;
 
-  // 2. Directional Sun Light & Point Light
+  // 2. Directional Sun Light & Omni Point Light
   m_sunLight = addChild<DirectionalLight3D>();
   m_sunLight->lightColor = Color::from_rgba8(255, 245, 220);
   m_sunLight->lightEnergy = 1.3f;
 
-  m_pointLight = addChild<PointLight3D>();
-  m_pointLight->setPosition(Vector3(0.0f, 3.0f, 0.0f));
-  m_pointLight->lightColor = Color::CYAN;
-  m_pointLight->lightRange = 20.0f;
+  m_omniLight = addChild<OmniLight3D>();
+  m_omniLight->setPosition(Vector3(0.0f, 4.0f, 0.0f));
+  m_omniLight->lightColor = Color::CYAN;
+  m_omniLight->omniRange = 25.0f;
 
-  // 3. Central 3D Cube MeshInstance3D with StandardMaterial3D
+  // 3. Static Physics Ground Floor (StaticBody3D + CollisionShape3D + PlaneMesh)
+  m_floorBody = addChild<StaticBody3D>();
+  m_floorBody->setPosition(Vector3(0.0f, -0.1f, 0.0f));
+
+  auto floorCol = m_floorBody->addChild<CollisionShape3D>(std::make_shared<BoxShape3D>(Vector3(18.0f, 0.2f, 18.0f)));
+  (void)floorCol;
+
+  auto floorMat = StandardMaterial3D::create(Color::from_rgba8(35, 42, 60));
+  floorMat->cullMode = CullMode3D::Disabled;
+
+  m_floorMesh = m_floorBody->addChild<MeshInstance3D>(PlaneMesh::create(Vector2(18.0f, 18.0f)));
+  m_floorMesh->setMaterial(floorMat);
+
+  // 4. Third-Person CharacterBody3D (Player)
+  m_player = addChild<CharacterBody3D>();
+  m_player->setPosition(Vector3(0.0f, 2.0f, 0.0f));
+
+  auto playerCol = m_player->addChild<CollisionShape3D>(std::make_shared<BoxShape3D>(Vector3(0.8f, 1.8f, 0.8f)));
+  (void)playerCol;
+
+  auto heroMat = StandardMaterial3D::create(Color::from_rgba8(40, 140, 255));
+  heroMat->metallic = 0.5f;
+  heroMat->roughness = 0.3f;
+
+  m_playerMesh = m_player->addChild<MeshInstance3D>(BoxMesh::create(Vector3(0.8f, 1.8f, 0.8f)));
+  m_playerMesh->setMaterial(heroMat);
+
+  // 5. SpringArm3D Attached to Player at Head/Shoulder Height
+  m_springArm = m_player->addChild<SpringArm3D>();
+  m_springArm->setPosition(Vector3(0.0f, 1.4f, 0.0f));
+  m_springArm->springLength = 6.0f;
+  m_springArm->pitch = -0.3f;
+  m_springArm->updateRotation();
+
+  // 6. Camera3D Attached to the end of SpringArm3D Boom
+  m_camera = m_springArm->addChild<Camera3D>();
+  m_camera->fov = 70.0f;
+  m_camera->makeCurrent();
+
+  // 7. Step-Up Obstacle Crate (StaticBody3D + CollisionShape3D)
   auto goldMat = StandardMaterial3D::create(Color::GOLD);
   goldMat->metallic = 0.8f;
   goldMat->roughness = 0.2f;
 
-  m_cube = addChild<MeshInstance3D>(Mesh3D::createBox(Vector3(1.6f, 1.6f, 1.6f)));
-  m_cube->setPosition(Vector3(0.0f, 1.0f, 0.0f));
-  m_cube->setMaterial(goldMat);
+  auto crate = addChild<StaticBody3D>();
+  crate->setPosition(Vector3(3.0f, 0.6f, -2.0f));
+  crate->addChild<CollisionShape3D>(std::make_shared<BoxShape3D>(Vector3(1.8f, 1.2f, 1.8f)));
+  auto crateMesh = crate->addChild<MeshInstance3D>(BoxMesh::create(Vector3(1.8f, 1.2f, 1.8f)));
+  crateMesh->setMaterial(goldMat);
 
-  // 4. Orbiting UV Sphere MeshInstance3D with StandardMaterial3D
+  // 8. Orbiting Decorative UV Sphere
   auto aquaMat = StandardMaterial3D::create(Color::from_rgba8(80, 200, 255));
   aquaMat->metallic = 0.4f;
   aquaMat->roughness = 0.1f;
 
-  m_sphere = addChild<MeshInstance3D>(Mesh3D::createSphere(0.55f, 20, 40));
-  m_sphere->setPosition(Vector3(3.0f, 1.5f, 0.0f));
+  m_sphere = addChild<MeshInstance3D>(SphereMesh::create(0.5f));
+  m_sphere->setPosition(Vector3(-3.0f, 1.5f, -2.0f));
   m_sphere->setMaterial(aquaMat);
 
-  // 5. Godot Standard Ground Plane MeshInstance3D with StandardMaterial3D
-  auto floorMat = StandardMaterial3D::create(Color::from_rgba8(35, 42, 60));
-  floorMat->cullMode = CullMode3D::Disabled;
-
-  m_plane = addChild<MeshInstance3D>(Mesh3D::createPlane(Vector2(6.0f, 6.0f)));
-  m_plane->setPosition(Vector3(0.0f, 0.0f, 0.0f));
-  m_plane->setMaterial(floorMat);
-
-  // 6. UI HUD Overlay
+  // 9. UI HUD Overlay
   Vector2 vp = Window::getViewportSize();
   auto overlay = addChild<Control>("UIOverlay");
   overlay->setSize(vp);
 
+  // Left Panel: Controls & Navigation
   auto panel = overlay->addChild<Panel>();
   panel->setPosition({24.0f, 24.0f});
   panel->setSize({380.0f, 240.0f});
@@ -345,41 +395,149 @@ void Showcase3DScene::onReady() {
   panel->borderWidth = 1.5f;
   panel->cornerRadius = 8.0f;
 
-  auto vbox = panel->addChild<VBoxContainer>(7.0f);
-  vbox->setPosition({16.0f, 14.0f});
-  vbox->setSize({348.0f, 212.0f});
+  auto vbox = panel->addChild<VBoxContainer>(5.0f);
+  vbox->setPosition({14.0f, 12.0f});
+  vbox->setSize({352.0f, 216.0f});
 
-  vbox->addChild<Label>("3D VULKAN ENGINE SHOWCASE", 17.0f, Color::GOLD);
-  vbox->addChild<Label>("• Architecture: Godot 4 Node3D + EnTT ECS", 12.0f, Color::from_rgba8(170, 190, 230));
-  vbox->addChild<Label>("• Graphics: Vulkan + AMD VMA Memory Allocator", 12.0f, Color::from_rgba8(100, 230, 160));
-  vbox->addChild<Label>("• Materials: StandardMaterial3D (PBR Shading)", 12.0f, Color::from_rgba8(170, 190, 230));
-  vbox->addChild<Label>("• Controls: Drag Mouse to Orbit, Scroll to Zoom", 12.0f, Color::from_rgba8(255, 215, 80));
+  vbox->addChild<Label>("3D THIRD-PERSON CONTROLLER", 15.0f, Color::GOLD);
+  vbox->addChild<Label>("• Walk: W/A/S/D or Arrow Keys", 11.5f, Color::from_rgba8(100, 230, 160));
+  vbox->addChild<Label>("• Jump: SPACE (Bullet 3 Kinematic Step)", 11.5f, Color::from_rgba8(120, 220, 255));
+  vbox->addChild<Label>("• Orbit Camera: Drag Mouse (SpringArm3D)", 11.5f, Color::from_rgba8(255, 215, 80));
+  vbox->addChild<Label>("• Zoom Boom: Mouse Scroll Wheel", 11.5f, Color::from_rgba8(255, 215, 80));
+  vbox->addChild<Label>("• Nodes: CharacterBody3D + SpringArm3D", 11.5f, Color::from_rgba8(170, 190, 230));
 
   vbox->addChild<HSeparator>();
 
   auto backBtn = vbox->addChild<Button>(IconType::ChevronLeft, "Return to Main Menu");
-  backBtn->customMinimumSize = {348.0f, 34.0f};
-  backBtn->fontSize = 14.0f;
+  backBtn->customMinimumSize = {352.0f, 28.0f};
+  backBtn->fontSize = 12.0f;
   backBtn->pressed.connect([this]() {
     std::cout << "=== Returning to Main Menu ===" << std::endl;
     getTree()->changeScene(makeRef<MainMenuScene>());
   });
+
+  // Right Panel: Live Engine, Time & Physics Diagnostics
+  auto diagPanel = overlay->addChild<Panel>();
+  diagPanel->setPosition({std::max(24.0f, vp.x - 450.0f), 24.0f});
+  diagPanel->setSize({426.0f, 240.0f});
+  diagPanel->backgroundColor = Color::from_rgba8(18, 22, 34, 235);
+  diagPanel->borderColor = Color::from_rgba8(70, 90, 140);
+  diagPanel->borderWidth = 1.5f;
+  diagPanel->cornerRadius = 8.0f;
+
+  auto diagVbox = diagPanel->addChild<VBoxContainer>(5.0f);
+  diagVbox->setPosition({14.0f, 12.0f});
+  diagVbox->setSize({398.0f, 216.0f});
+
+  diagVbox->addChild<Label>("REAL-TIME ENGINE DIAGNOSTICS", 15.0f, Color::CYAN);
+  m_fpsLabel = diagVbox->addChild<Label>("Performance: Calculating...", 12.0f, Color::from_rgba8(80, 240, 140));
+  m_physicsStatusLabel = diagVbox->addChild<Label>("Bullet 3 Physics: [INITIALIZING]", 11.5f, Color::from_rgba8(120, 220, 255));
+  m_playerPosLabel = diagVbox->addChild<Label>("Player: Pos (0.0, 0.0, 0.0) | Vel (0.0, 0.0, 0.0)", 11.5f, Color::from_rgba8(220, 230, 245));
+  m_cameraInfoLabel = diagVbox->addChild<Label>("Camera Boom: 6.0m | Pitch: -17° | Yaw: 0°", 11.5f, Color::from_rgba8(255, 215, 80));
+  
+  diagVbox->addChild<HSeparator>();
+  diagVbox->addChild<Label>("Renderer: 3D Vulkan PBR Software Rasterizer", 11.0f, Color::from_rgba8(150, 170, 200));
+  diagVbox->addChild<Label>("Environment: WorldEnvironment (Sky & ACES)", 11.0f, Color::from_rgba8(150, 170, 200));
 }
 
 void Showcase3DScene::onProcess(float delta) {
-  if (m_cube) {
-    m_cube->rotateY(1.2f * delta);
-    m_cube->rotateX(0.7f * delta);
+  // 1. Third-Person Player Kinematic Movement with SpringArm3D Heading
+  if (m_player) {
+    Vector3 inputDir(0.0f, 0.0f, 0.0f);
+    if (Input::isKeyPressed(Key::W) || Input::isKeyPressed(Key::Up)) inputDir.z -= 1.0f;
+    if (Input::isKeyPressed(Key::S) || Input::isKeyPressed(Key::Down)) inputDir.z += 1.0f;
+    if (Input::isKeyPressed(Key::A) || Input::isKeyPressed(Key::Left)) inputDir.x -= 1.0f;
+    if (Input::isKeyPressed(Key::D) || Input::isKeyPressed(Key::Right)) inputDir.x += 1.0f;
+
+    float yaw = m_springArm ? m_springArm->yaw : 0.0f;
+    Vector3 forward(-std::sin(yaw), 0.0f, -std::cos(yaw));
+    Vector3 right(std::cos(yaw), 0.0f, -std::sin(yaw));
+    Vector3 moveVec = (forward * (-inputDir.z) + right * inputDir.x);
+
+    float speed = 7.0f;
+    if (moveVec.length_squared() > 0.001f) {
+      moveVec = moveVec.normalized();
+      m_player->velocity.x = moveVec.x * speed;
+      m_player->velocity.z = moveVec.z * speed;
+
+      float targetAngle = std::atan2(moveVec.x, moveVec.z);
+      if (m_playerMesh) {
+        m_playerMesh->setRotation(Vector3(0.0f, targetAngle, 0.0f));
+      }
+    } else {
+      m_player->velocity.x = 0.0f;
+      m_player->velocity.z = 0.0f;
+    }
+
+    // Apply gravity only in air
+    if (!m_player->isOnFloor()) {
+      m_player->velocity.y -= 24.0f * delta;
+    } else {
+      m_player->velocity.y = -0.1f;
+    }
+
+    // Jump
+    if (Input::isKeyPressed(Key::Space) && m_player->isOnFloor()) {
+      m_player->velocity.y = 9.0f;
+    }
+
+    m_player->move_and_slide(delta);
+
+    // If fallen off platform into the void, respawn
+    if (m_player->getPosition().y < -30.0f) {
+      m_player->setPosition(Vector3(0.0f, 3.0f, 0.0f));
+      m_player->velocity = Vector3(0.0f, 0.0f, 0.0f);
+    }
   }
 
+  // 2. Real-Time HUD Metrics Update (using Time subsystem)
+  if (m_fpsLabel) {
+    float fps = Time::getFPS();
+    float dtMs = Time::getDeltaTimeMs();
+    uint64_t frameCount = Time::getFrameCount();
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "Performance: %.1f FPS  (%.2f ms) | Frame #%llu", fps, dtMs, static_cast<unsigned long long>(frameCount));
+    m_fpsLabel->setText(buf);
+    if (fps >= 50.0f) m_fpsLabel->fontColor = Color::from_rgba8(80, 240, 140);
+    else if (fps >= 30.0f) m_fpsLabel->fontColor = Color::from_rgba8(255, 215, 80);
+    else m_fpsLabel->fontColor = Color::from_rgba8(255, 90, 90);
+  }
+
+  if (m_physicsStatusLabel && m_player) {
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "Bullet 3 Physics: %s %s",
+                  m_player->isOnFloor() ? "[GROUNDED]" : "[AIRBORNE / FALLING]",
+                  m_player->isOnWall() ? "[WALL CONTACT]" : "");
+    m_physicsStatusLabel->setText(buf);
+    m_physicsStatusLabel->fontColor = m_player->isOnFloor() ? Color::from_rgba8(120, 220, 255) : Color::from_rgba8(255, 140, 80);
+  }
+
+  if (m_playerPosLabel && m_player) {
+    Vector3 pos = m_player->getPosition();
+    Vector3 vel = m_player->velocity;
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "Player: Pos (%.2f, %.2f, %.2f) | Vel (%.1f, %.1f, %.1f)", pos.x, pos.y, pos.z, vel.x, vel.y, vel.z);
+    m_playerPosLabel->setText(buf);
+  }
+
+  if (m_cameraInfoLabel && m_springArm) {
+    float pitchDeg = m_springArm->pitch * 180.0f / 3.14159265f;
+    float yawDeg = m_springArm->yaw * 180.0f / 3.14159265f;
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "Camera Boom: %.2f m / %.1f m | Pitch: %.1f° | Yaw: %.1f°",
+                  m_springArm->getHitLength(), m_springArm->springLength, pitchDeg, yawDeg);
+    m_cameraInfoLabel->setText(buf);
+  }
+
+  // 3. Decorative rotating sphere
   if (m_sphere) {
     m_orbitAngle += delta * 1.5f;
-    float radius = 3.2f;
+    float radius = 3.0f;
     m_sphere->setPosition(Vector3(
-        std::cos(m_orbitAngle) * radius,
-        1.2f + std::sin(m_orbitAngle * 2.0f) * 0.6f,
-        std::sin(m_orbitAngle) * radius));
-    m_sphere->rotateY(2.2f * delta);
+        -3.0f + std::cos(m_orbitAngle) * radius,
+        1.5f + std::sin(m_orbitAngle * 2.0f) * 0.5f,
+        -2.0f + std::sin(m_orbitAngle) * radius));
+    m_sphere->rotateY(2.0f * delta);
   }
 }
 

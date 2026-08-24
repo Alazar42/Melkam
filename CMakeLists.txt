@@ -15,6 +15,7 @@ find_package(box2d REQUIRED)
 find_package(VulkanHeaders REQUIRED)
 find_package(VulkanMemoryAllocator REQUIRED)
 find_package(volk REQUIRED)
+find_package(Bullet REQUIRED)
 
 add_executable(MelkamEngine
     src/main.cpp
@@ -29,6 +30,7 @@ target_link_libraries(MelkamEngine PRIVATE
     vulkan-headers::vulkan-headers
     GPUOpen::VulkanMemoryAllocator
     volk::volk
+    Bullet::Bullet
 )
 
 # Automatically bundle / copy project assets with the executable output

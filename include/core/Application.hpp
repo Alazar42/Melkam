@@ -104,6 +104,7 @@ public:
     Renderer3D::init(*m_window);
     Audio::init();
     PhysicsServer2D::init();
+    PhysicsServer3D::get().init();
 
     // Godot-style Boot Splash Presentation
     BootSplash::run(*m_window, bootSplash);
@@ -119,12 +120,13 @@ public:
 
       float dt = Time::getDeltaTime();
 
-      // 1. Fixed Timestep Physics Cycle (Node Physics Process -> Box2D Simulation Step)
+      // 1. Fixed Timestep Physics Cycle (Node Physics Process -> Box2D & Bullet 3D Simulation Step)
       while (Time::shouldDoFixedUpdate()) {
         float fixedDt = Time::getFixedDeltaTime();
         m_tree->savePhysicsTransformState();
         m_tree->physicsProcess(fixedDt);
         PhysicsServer2D::step(fixedDt);
+        PhysicsServer3D::get().step(fixedDt);
       }
 
       // 2. Variable Frame Update Cycle
@@ -152,6 +154,7 @@ public:
 
     onShutdown();
     PhysicsServer2D::shutdown();
+    PhysicsServer3D::get().shutdown();
     Renderer3D::shutdown();
     Audio::shutdown();
   }

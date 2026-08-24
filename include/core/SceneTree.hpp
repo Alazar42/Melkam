@@ -84,15 +84,25 @@ public:
     // 1. Process active coroutine timers and awaiters
     CoroutineScheduler::get().process(delta);
 
-    // 2. Process active tweens
-    for (auto it = m_tweens.begin(); it != m_tweens.end();) {
-      if (auto &t = *it) {
-        if (t->process(delta) || t->isKilled()) {
-          it = m_tweens.erase(it);
-          continue;
+    // 2. Process active tweens safely without iterator invalidation
+    if (!m_tweens.empty()) {
+      auto activeTweens = std::move(m_tweens);
+      m_tweens.clear();
+      std::vector<std::shared_ptr<Tween>> remainingTweens;
+      remainingTweens.reserve(activeTweens.size());
+
+      for (auto &t : activeTweens) {
+        if (t && !t->process(delta) && !t->isKilled()) {
+          remainingTweens.push_back(std::move(t));
         }
       }
-      ++it;
+
+      if (!m_tweens.empty()) {
+        remainingTweens.insert(remainingTweens.end(),
+                               std::make_move_iterator(m_tweens.begin()),
+                               std::make_move_iterator(m_tweens.end()));
+      }
+      m_tweens = std::move(remainingTweens);
     }
 
     // 3. Process active node tree

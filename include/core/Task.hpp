@@ -100,53 +100,96 @@ public:
       }
     }
 
-    // 2. Process active timers
-    for (auto it = m_timers.begin(); it != m_timers.end();) {
-      if (it->isAlive && !*it->isAlive) {
-        it = m_timers.erase(it);
-        continue;
+    // 2. Process active timers safely without iterator invalidation
+    if (!m_timers.empty()) {
+      std::vector<std::shared_ptr<SceneTreeTimer>> timersToEmit;
+      std::vector<std::coroutine_handle<>> handlesToResume;
+      std::vector<TimerAwaiterItem> remainingTimers;
+      remainingTimers.reserve(m_timers.size());
+
+      auto activeTimers = std::move(m_timers);
+      m_timers.clear();
+
+      for (auto &item : activeTimers) {
+        if (item.isAlive && !*item.isAlive) {
+          continue;
+        }
+
+        item.timeLeft -= delta;
+        if (item.timeLeft <= 0.0f) {
+          if (item.sceneTreeTimer) {
+            timersToEmit.push_back(item.sceneTreeTimer);
+          }
+          if (item.handle && !item.handle.done()) {
+            handlesToResume.push_back(item.handle);
+          }
+        } else {
+          remainingTimers.push_back(std::move(item));
+        }
       }
 
-      it->timeLeft -= delta;
-      if (it->timeLeft <= 0.0f) {
-        auto handle = it->handle;
-        auto timerRef = it->sceneTreeTimer;
-        it = m_timers.erase(it);
+      // Re-merge any newly queued timers added during iteration
+      if (!m_timers.empty()) {
+        remainingTimers.insert(remainingTimers.end(),
+                               std::make_move_iterator(m_timers.begin()),
+                               std::make_move_iterator(m_timers.end()));
+      }
+      m_timers = std::move(remainingTimers);
 
+      for (auto &timerRef : timersToEmit) {
         if (timerRef) {
           timerRef->emitTimeout();
         }
+      }
 
+      for (auto &handle : handlesToResume) {
         if (handle && !handle.done()) {
           handle.resume();
         }
-      } else {
-        ++it;
       }
     }
 
-    // 3. Process conditional awaiters (WaitUntil / WaitWhile)
-    for (auto it = m_conditions.begin(); it != m_conditions.end();) {
-      if (it->isAlive && !*it->isAlive) {
-        it = m_conditions.erase(it);
-        continue;
+    // 3. Process conditional awaiters (WaitUntil / WaitWhile) safely
+    if (!m_conditions.empty()) {
+      std::vector<std::coroutine_handle<>> condHandlesToResume;
+      std::vector<ConditionAwaiterItem> remainingConditions;
+      remainingConditions.reserve(m_conditions.size());
+
+      auto activeConditions = std::move(m_conditions);
+      m_conditions.clear();
+
+      for (auto &item : activeConditions) {
+        if (item.isAlive && !*item.isAlive) {
+          continue;
+        }
+
+        bool conditionMet = false;
+        try {
+          if (item.condition) conditionMet = item.condition();
+        } catch (...) {
+          conditionMet = true;
+        }
+
+        if (conditionMet) {
+          if (item.handle && !item.handle.done()) {
+            condHandlesToResume.push_back(item.handle);
+          }
+        } else {
+          remainingConditions.push_back(std::move(item));
+        }
       }
 
-      bool conditionMet = false;
-      try {
-        if (it->condition) conditionMet = it->condition();
-      } catch (...) {
-        conditionMet = true;
+      if (!m_conditions.empty()) {
+        remainingConditions.insert(remainingConditions.end(),
+                                   std::make_move_iterator(m_conditions.begin()),
+                                   std::make_move_iterator(m_conditions.end()));
       }
+      m_conditions = std::move(remainingConditions);
 
-      if (conditionMet) {
-        auto handle = it->handle;
-        it = m_conditions.erase(it);
+      for (auto &handle : condHandlesToResume) {
         if (handle && !handle.done()) {
           handle.resume();
         }
-      } else {
-        ++it;
       }
     }
   }

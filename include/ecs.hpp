@@ -340,6 +340,7 @@ public:
 
   // Returns the underlying entt::entity identifier.
   entt::entity handle() const { return m_handle; }
+  entt::entity getHandle() const { return m_handle; }
 
   // Implicit conversion operator to entt::entity.
   operator entt::entity() const { return m_handle; }

@@ -50,6 +50,13 @@ public:
         cos_x * cos_y * cos_z + sin_x * sin_y * sin_z);
   }
 
+  Vector3 to_euler() const {
+    float roll = std::atan2(2.0f * (w * z + x * y), 1.0f - 2.0f * (y * y + z * z));
+    float pitch = std::asin(std::clamp(2.0f * (w * x - y * z), -1.0f, 1.0f));
+    float yaw = std::atan2(2.0f * (w * y + z * x), 1.0f - 2.0f * (x * x + y * y));
+    return Vector3(pitch, yaw, roll);
+  }
+
   float length_squared() const { return x * x + y * y + z * z + w * w; }
   float length() const { return std::sqrt(length_squared()); }
 

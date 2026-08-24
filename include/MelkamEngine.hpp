@@ -153,24 +153,42 @@
 #include "nodes/3D/Plane.hpp"
 #include "nodes/3D/Frustum.hpp"
 
-// 3D Materials & Shading
+// 3D Materials & Meshes
 #include "nodes/3D/StandardMaterial3D.hpp"
+#include "nodes/3D/meshes/Mesh.hpp"
+#include "nodes/3D/meshes/PrimitiveMesh.hpp"
 
-// 3D Spatial Nodes & Cameras (Godot-Inspired)
+// 3D Visual & Geometry Hierarchy (Godot-Inspired)
 #include "nodes/3D/Node3D.hpp"
+#include "nodes/3D/VisualInstance3D.hpp"
+#include "nodes/3D/GeometryInstance3D.hpp"
+#include "nodes/3D/MeshInstance3D.hpp"
+#include "nodes/3D/Label3D.hpp"
+
+// 3D Cameras & Lights
 #include "nodes/3D/Camera3D.hpp"
 #include "nodes/3D/CameraController3D.hpp"
+#include "nodes/3D/Light3D.hpp"
+#include "nodes/3D/DirectionalLight3D.hpp"
+#include "nodes/3D/OmniLight3D.hpp"
+#include "nodes/3D/SpotLight3D.hpp"
+#include "nodes/3D/WorldEnvironment.hpp"
 #include "nodes/3D/Marker3D.hpp"
 #include "nodes/3D/SpringArm3D.hpp"
-#include "nodes/3D/MeshInstance3D.hpp"
-#include "nodes/3D/DirectionalLight3D.hpp"
-#include "nodes/3D/PointLight3D.hpp"
-#include "nodes/3D/SpotLight3D.hpp"
 
-// 3D Collision Shapes & Raycasting (Godot-Inspired)
+// 3D Bullet Physics & Collision Bodies
 #include "nodes/3D/physics/Shape3D.hpp"
 #include "nodes/3D/physics/BoxShape3D.hpp"
 #include "nodes/3D/physics/SphereShape3D.hpp"
+#include "nodes/3D/physics/CapsuleShape3D.hpp"
+#include "nodes/3D/physics/CylinderShape3D.hpp"
+#include "nodes/3D/physics/PhysicsServer3D.hpp"
+#include "nodes/3D/physics/CollisionShape3D.hpp"
+#include "nodes/3D/physics/CollisionObject3D.hpp"
+#include "nodes/3D/physics/StaticBody3D.hpp"
+#include "nodes/3D/physics/RigidBody3D.hpp"
+#include "nodes/3D/physics/CharacterBody3D.hpp"
+#include "nodes/3D/physics/Area3D.hpp"
 #include "nodes/3D/RayCast3D.hpp"
 
 // 3D Hardware Vulkan Renderer & ECS Systems

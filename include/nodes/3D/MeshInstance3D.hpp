@@ -1,16 +1,14 @@
 #pragma once
 
 #include "components/Components3D.hpp"
-#include "nodes/3D/Node3D.hpp"
+#include "nodes/3D/GeometryInstance3D.hpp"
+#include "nodes/3D/meshes/Mesh.hpp"
 #include <cmath>
 #include <vector>
 
-// 3D Mesh Geometry Generator & Procedural Primitives
-class Mesh3D {
+// 3D Mesh Geometry Generator & Procedural Primitives (inheriting from Godot Mesh)
+class Mesh3D : public Mesh {
 public:
-  std::vector<Vertex3D> vertices;
-  std::vector<uint32_t> indices;
-  AABB aabb;
 
   // Generates a 3D Box / Cube Mesh with correct vertex normals and UVs
   static Mesh3D createBox(const Vector3 &size = Vector3(1.0f, 1.0f, 1.0f)) {
@@ -172,26 +170,43 @@ public:
 };
 
 // 3D Mesh Instance Node (inspired by Godot MeshInstance3D)
-class MeshInstance3D : public Node3D {
+class MeshInstance3D : public GeometryInstance3D {
 public:
   Mesh3D mesh;
   Color albedoColor = Color::WHITE;
   float roughness = 0.5f;
   float metallic = 0.0f;
-  bool castShadow = true;
   bool cullBackfaces = true;
   Ref<StandardMaterial3D> material = nullptr;
 
-  MeshInstance3D() : Node3D("MeshInstance3D") {
+  MeshInstance3D() : GeometryInstance3D("MeshInstance3D") {
     setMesh(Mesh3D::createBox());
   }
 
-  explicit MeshInstance3D(const Mesh3D &m) : Node3D("MeshInstance3D") {
+  explicit MeshInstance3D(const Mesh3D &m) : GeometryInstance3D("MeshInstance3D") {
     setMesh(m);
   }
 
-  void setMesh(const Mesh3D &m) {
-    mesh = m;
+  explicit MeshInstance3D(const Ref<Mesh> &m) : GeometryInstance3D("MeshInstance3D") {
+    if (m) setMesh(*m);
+  }
+
+  void setMesh(const Mesh &m) {
+    mesh.vertices = m.vertices;
+    mesh.indices = m.indices;
+    mesh.aabb = m.aabb;
+    mesh.material = m.material;
+    if (m.material) {
+      setMaterial(m.material);
+    }
+    syncECS();
+  }
+
+  void setMesh(const Ref<Mesh> &m) {
+    if (m) setMesh(*m);
+  }
+
+  void syncECS() {
     if (m_entity.isValid()) {
       auto &comp = m_entity.getOrAddComponent<Mesh3DComponent>();
       comp.vertices = mesh.vertices;

@@ -13,15 +13,19 @@ public:
   static void updateTransforms() {
     auto view = Entity::getRegistry().view<Transform3DComponent>();
 
+    auto getGlobal = [&](auto self, entt::entity e) -> Transform3D {
+      if (e == entt::null || !Entity::getRegistry().valid(e)) return Transform3D();
+      auto *c = Entity::getRegistry().try_get<Transform3DComponent>(e);
+      if (!c) return Transform3D();
+      if (c->parent != entt::null && Entity::getRegistry().valid(c->parent)) {
+        return self(self, c->parent) * c->localTransform;
+      }
+      return c->localTransform;
+    };
+
     for (auto entity : view) {
       auto &comp = view.get<Transform3DComponent>(entity);
-      if (comp.parent != entt::null && Entity::getRegistry().valid(comp.parent)) {
-        if (auto *parentTransform = Entity::getRegistry().try_get<Transform3DComponent>(comp.parent)) {
-          comp.globalTransform = parentTransform->globalTransform * comp.localTransform;
-          continue;
-        }
-      }
-      comp.globalTransform = comp.localTransform;
+      comp.globalTransform = getGlobal(getGlobal, entity);
     }
   }
 

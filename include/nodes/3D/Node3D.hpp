@@ -129,6 +129,10 @@ public:
     return getGlobalTransform().origin;
   }
 
+  void onReady() override {
+    syncToECS();
+  }
+
   // Internal EnTT Entity Access
   Entity getEntity() const { return m_entity; }
 
@@ -137,6 +141,11 @@ protected:
     if (m_entity.isValid()) {
       auto &comp = m_entity.getOrAddComponent<Transform3DComponent>();
       comp.localTransform = transform;
+      if (auto *parent3D = dynamic_cast<Node3D *>(getParent())) {
+        comp.parent = parent3D->getEntity().getHandle();
+      } else {
+        comp.parent = entt::null;
+      }
       comp.isDirty = true;
     }
   }
